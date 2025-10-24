@@ -70,6 +70,61 @@ export default function TimezoneConverter() {
     window.history.replaceState({}, '', newUrl);
   }, [fromZone, toZone, dtLocalISO]);
 
+  // Save working hours to localStorage
+  useEffect(() => {
+    const workingHours = {
+      fromWorkStart,
+      fromWorkEnd,
+      toWorkStart,
+      toWorkEnd
+    };
+    localStorage.setItem('timezoneHelper_workingHours', JSON.stringify(workingHours));
+  }, [fromWorkStart, fromWorkEnd, toWorkStart, toWorkEnd]);
+
+  // Save timezone selections to localStorage
+  useEffect(() => {
+    const timezoneSettings = {
+      fromZone,
+      toZone
+    };
+    localStorage.setItem('timezoneHelper_timezones', JSON.stringify(timezoneSettings));
+  }, [fromZone, toZone]);
+
+  // Load working hours from localStorage on component mount
+  useEffect(() => {
+    const savedWorkingHours = localStorage.getItem('timezoneHelper_workingHours');
+    if (savedWorkingHours) {
+      try {
+        const parsed = JSON.parse(savedWorkingHours);
+        if (parsed.fromWorkStart !== undefined) setFromWorkStart(parsed.fromWorkStart);
+        if (parsed.fromWorkEnd !== undefined) setFromWorkEnd(parsed.fromWorkEnd);
+        if (parsed.toWorkStart !== undefined) setToWorkStart(parsed.toWorkStart);
+        if (parsed.toWorkEnd !== undefined) setToWorkEnd(parsed.toWorkEnd);
+      } catch (e) {
+        console.warn('Failed to parse saved working hours:', e);
+      }
+    }
+  }, []);
+
+  // Load timezone selections from localStorage on component mount (after URL params)
+  useEffect(() => {
+    const savedTimezones = localStorage.getItem('timezoneHelper_timezones');
+    if (savedTimezones) {
+      try {
+        const parsed = JSON.parse(savedTimezones);
+        // Only set if not already set by URL parameters
+        if (parsed.fromZone && timezones.includes(parsed.fromZone) && !fromZone) {
+          setFromZone(parsed.fromZone);
+        }
+        if (parsed.toZone && timezones.includes(parsed.toZone) && !toZone) {
+          setToZone(parsed.toZone);
+        }
+      } catch (e) {
+        console.warn('Failed to parse saved timezones:', e);
+      }
+    }
+  }, [timezones, fromZone, toZone]);
+
   const presets = {
     "Morning": [9, 12],
     "Workday": [9, 17],
@@ -455,7 +510,8 @@ export default function TimezoneConverter() {
       
       let status = 'none';
       if(inFrom && inTo) status = 'both';
-      else if(inFrom || inTo) status = 'partial';
+      else if(inFrom) status = 'from';
+      else if(inTo) status = 'to';
       segs.push({ i, hh, mm, instant, status });
     }
     return segs;
@@ -774,20 +830,24 @@ Text: \"${text}\"`;
             className="w-full mt-2" 
           />
           <div className="mt-2 flex gap-1 items-center">
-            {segments.map(s => <div key={s.i} title={`${String(s.hh).padStart(2,'0')}:${s.mm===0?'00':'30'}`} style={{flex:1,height:14,borderRadius:3,background:s.status==='both'?'#4ade80':s.status==='partial'?'#fde68a':'#fecaca'}} />)}
+            {segments.map(s => <div key={s.i} title={`${String(s.hh).padStart(2,'0')}:${s.mm===0?'00':'30'}`} style={{flex:1,height:14,borderRadius:3,background:s.status==='both'?'#4ade80':s.status==='from'?'#fde68a':s.status==='to'?'#fb923c':'#fecaca'}} />)}
           </div>
           <div className="mt-2 text-sm text-slate-700">
             {overlapWindow ? (<div>Overlap window (both working): <strong>{instantToLocalISO(parseLocalInputToDate(overlapWindow.startISO, fromZone), fromZone).slice(0,16).replace('T',' ')} — {instantToLocalISO(parseLocalInputToDate(overlapWindow.endISO, fromZone), fromZone).slice(0,16).replace('T',' ')}</strong> (in {fromZone} local)</div>) : (<div>No full overlap on this date.</div>)}
           </div>
           <div className="mt-3 text-xs text-slate-600">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded" style={{background: '#4ade80'}}></div>
                 <span>Both timezones working</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded" style={{background: '#fde68a'}}></div>
-                <span>One timezone working</span>
+                <span>{fromZone || 'From'} working</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded" style={{background: '#fb923c'}}></div>
+                <span>{toZone || 'To'} working</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded" style={{background: '#fecaca'}}></div>
