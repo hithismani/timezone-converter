@@ -471,13 +471,13 @@ export default function TimezoneConverter() {
     return `${sign}${h}${m ? `:${String(m).padStart(2,'0')}` : ''} hrs`;
   }
 
-  // compute availability segments (48 half-hour segments) representing the selected date in fromZone
+  // compute availability segments (288 5-minute segments) representing the selected date in fromZone
   function buildSegments(){
     const segs: any[] = [];
     if(!dtLocalISO) return segs;
-    for(let i=0;i<48;i++){
-      const hh = Math.floor(i/2);
-      const mm = (i%2)*30;
+    for(let i=0;i<288;i++){
+      const hh = Math.floor(i/12);
+      const mm = (i%12)*5;
       const datePart = dtLocalISO.split('T')[0];
       const localISO = `${datePart}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
       const instant = parseLocalInputToDate(localISO, fromZone);
@@ -547,10 +547,10 @@ export default function TimezoneConverter() {
     const localHourDecimal = getLocalHourDecimal(instant, fromZone);
     if (localHourDecimal === null) return;
     
-    // Convert to slider index (48 half-hour segments)
+    // Convert to slider index (288 5-minute segments)
     const hh = Math.floor(localHourDecimal);
     const mm = (localHourDecimal % 1) * 60;
-    const idx = hh*2 + (mm>=30?1:0);
+    const idx = hh*12 + Math.floor(mm/5);
     
     setSliderIndex(idx);
   }, [dtLocalISO, fromZone, isSliderDragging]);
@@ -558,8 +558,8 @@ export default function TimezoneConverter() {
   function onSliderChange(idx: number){ 
     setSliderIndex(idx); 
     const datePart = dtLocalISO.split('T')[0] || new Date().toISOString().slice(0,10); 
-    const hh = Math.floor(idx/2); 
-    const mm = (idx%2)*30; 
+    const hh = Math.floor(idx/12); 
+    const mm = (idx%12)*5; 
     const newISO = `${datePart}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; 
     setDtLocalISO(newISO); 
   }
@@ -669,15 +669,15 @@ Text: \"${text}\"`;
     }
   }
 
-  // Generate time options for select elements
-  const timeOptions = Array.from({length:48}).map((_,i)=>{
-    const hh=Math.floor(i/2);
-    const mm=i%2?':30':'';
-    const v=hh+(i%2?0.5:0);
+  // Generate time options for select elements (5-minute intervals)
+  const timeOptions = Array.from({length:288}).map((_,i)=>{
+    const hh=Math.floor(i/12);
+    const mm=(i%12)*5;
+    const v=hh+(mm/60);
     return { 
       i, 
       value: v, 
-      label: `${String(hh).padStart(2,'0')}${mm}`
+      label: `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`
     };
   });
 
@@ -695,6 +695,7 @@ Text: \"${text}\"`;
               value={dtLocalISO} 
               onChange={e=>setDtLocalISO(e.target.value)} 
               className="w-full mt-2 rounded-lg border px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+              tabIndex={1}
             />
           </div>
 
@@ -705,7 +706,7 @@ Text: \"${text}\"`;
               <label className="text-sm text-slate-600">From</label>
               <div className="mt-2 flex items-center gap-2 relative">
                 <div className="flex-1 relative">
-                  <input value={fromQuery !== null ? fromQuery : fromZone || ''} onChange={e=>setFromQuery(e.target.value)} onFocus={()=>{setFromFocused(true); setFromQuery('');}} onBlur={(e) => { if (!e.target.value) { setFromQuery(null); setFromZone(null); } setFromFocused(false); }} className="w-full rounded-lg border px-3 py-2 pr-10 bg-white" placeholder="Type or pick timezone" />
+                  <input value={fromQuery !== null ? fromQuery : fromZone || ''} onChange={e=>setFromQuery(e.target.value)} onFocus={()=>{setFromFocused(true); setFromQuery('');}} onBlur={(e) => { if (!e.target.value) { setFromQuery(null); setFromZone(null); } setFromFocused(false); }} className="w-full rounded-lg border px-3 py-2 pr-10 bg-white" placeholder="Type or pick timezone" tabIndex={2} />
                   <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">▼</span>
                   {fromFocused && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-md shadow max-h-40 overflow-auto z-10">
@@ -713,7 +714,7 @@ Text: \"${text}\"`;
                     </div>
                   )}
                 </div>
-                <button title="Working hours" onClick={()=>setShowFromSettings(true)} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200">⚙️</button>
+                <button title="Working hours" onClick={()=>setShowFromSettings(true)} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200" tabIndex={3}>⚙️</button>
               </div>
             </div>
 
@@ -721,7 +722,7 @@ Text: \"${text}\"`;
               <label className="text-sm text-slate-600">To</label>
               <div className="mt-2 flex items-center gap-2 relative">
                 <div className="flex-1 relative">
-                  <input value={toQuery !== null ? toQuery : toZone || ''} onChange={e=>setToQuery(e.target.value)} onFocus={()=>{setToFocused(true); setToQuery('');}} onBlur={(e) => { if (!e.target.value) { setToQuery(null); setToZone(null); } setToFocused(false); }} className="w-full rounded-lg border px-3 py-2 pr-10 bg-white" placeholder="Type or pick timezone" />
+                  <input value={toQuery !== null ? toQuery : toZone || ''} onChange={e=>setToQuery(e.target.value)} onFocus={()=>{setToFocused(true); setToQuery('');}} onBlur={(e) => { if (!e.target.value) { setToQuery(null); setToZone(null); } setToFocused(false); }} className="w-full rounded-lg border px-3 py-2 pr-10 bg-white" placeholder="Type or pick timezone" tabIndex={4} />
                   <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">▼</span>
                   {toFocused && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-md shadow max-h-40 overflow-auto z-10">
@@ -729,8 +730,8 @@ Text: \"${text}\"`;
                     </div>
                   )}
                 </div>
-                <button title="Working hours" onClick={()=>setShowToSettings(true)} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200">⚙️</button>
-                <button aria-label="Swap" onClick={handleSwap} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200">⇄</button>
+                <button title="Working hours" onClick={()=>setShowToSettings(true)} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200" tabIndex={5}>⚙️</button>
+                <button aria-label="Swap" onClick={handleSwap} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200" tabIndex={6}>⇄</button>
               </div>
             </div>
           </div>
@@ -805,9 +806,9 @@ Text: \"${text}\"`;
         {hasBuiltInAI && (
           <div className="mb-4 p-3 rounded-md bg-white/50 border">
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-              <input value={nlInput} onChange={e=>setNlInput(e.target.value)} className="flex-1 rounded-lg px-3 py-2 border bg-white" placeholder="Enter natural language time expression" />
+              <input value={nlInput} onChange={e=>setNlInput(e.target.value)} className="flex-1 rounded-lg px-3 py-2 border bg-white" placeholder="Enter natural language time expression" tabIndex={8} />
               <div className="flex gap-2">
-                <button onClick={onParseNL} className="px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors">Parse</button>
+                <button onClick={onParseNL} className="px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors" tabIndex={9}>Parse</button>
                 <a className="text-sm text-slate-600 underline self-center" href="https://developer.chrome.com/docs/ai/built-in/" target="_blank" rel="noreferrer">Guide</a>
               </div>
             </div>
@@ -816,11 +817,11 @@ Text: \"${text}\"`;
 
         {/* slider + overlap */}
         <div className="mb-4">
-          <label className="text-sm text-slate-600">Quick hour slider (half-hour steps)</label>
+          <label className="text-sm text-slate-600">Quick time slider (5-minute steps)</label>
           <input 
             type="range" 
             min={0} 
-            max={47} 
+            max={287} 
             value={sliderIndex ?? 0} 
             onChange={e=>onSliderChange(Number(e.target.value))} 
             onMouseDown={onSliderMouseDown}
@@ -828,9 +829,10 @@ Text: \"${text}\"`;
             onTouchStart={onSliderMouseDown}
             onTouchEnd={onSliderMouseUp}
             className="w-full mt-2" 
+            tabIndex={7}
           />
-          <div className="mt-2 flex gap-1 items-center">
-            {segments.map(s => <div key={s.i} title={`${String(s.hh).padStart(2,'0')}:${s.mm===0?'00':'30'}`} style={{flex:1,height:14,borderRadius:3,background:s.status==='both'?'#4ade80':s.status==='from'?'#fde68a':s.status==='to'?'#fb923c':'#fecaca'}} />)}
+          <div className="mt-2 flex gap-0.5 items-center">
+            {segments.map(s => <div key={s.i} title={`${String(s.hh).padStart(2,'0')}:${String(s.mm).padStart(2,'0')}`} style={{flex:1,height:20,borderRadius:2,background:s.status==='both'?'#4ade80':s.status==='from'?'#fde68a':s.status==='to'?'#fb923c':'#fecaca'}} />)}
           </div>
           <div className="mt-2 text-sm text-slate-700">
             {overlapWindow ? (<div>Overlap window (both working): <strong>{instantToLocalISO(parseLocalInputToDate(overlapWindow.startISO, fromZone), fromZone).slice(0,16).replace('T',' ')} — {instantToLocalISO(parseLocalInputToDate(overlapWindow.endISO, fromZone), fromZone).slice(0,16).replace('T',' ')}</strong> (in {fromZone} local)</div>) : (<div>No full overlap on this date.</div>)}
