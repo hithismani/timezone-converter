@@ -27,6 +27,7 @@ export default function TimezoneConverter() {
   const [showToSettings, setShowToSettings] = useState(false);
 
   const [sliderIndex, setSliderIndex] = useState<number | null>(null);
+  const [isSliderDragging, setIsSliderDragging] = useState(false);
 
   useEffect(() => {
     const ok = (() => {
@@ -97,6 +98,56 @@ export default function TimezoneConverter() {
     }
   }, [dtLocalISO]);
 
+  // Parse timezone from datetime input and update fromZone if needed
+  useEffect(() => {
+    if (!dtLocalISO) return;
+    
+    // Check if the input contains timezone information
+    const timezonePatterns = [
+      /\b(UTC|GMT)\b/i,
+      /\b(EST|EDT|CST|CDT|MST|MDT|PST|PDT)\b/i,
+      /\b(Asia\/[A-Za-z_]+)\b/i,
+      /\b(Europe\/[A-Za-z_]+)\b/i,
+      /\b(America\/[A-Za-z_]+)\b/i,
+      /\b(Africa\/[A-Za-z_]+)\b/i,
+      /\b(Australia\/[A-Za-z_]+)\b/i,
+      /\b(Pacific\/[A-Za-z_]+)\b/i,
+      /\b(Atlantic\/[A-Za-z_]+)\b/i,
+      /\b(Indian\/[A-Za-z_]+)\b/i
+    ];
+    
+    for (const pattern of timezonePatterns) {
+      const match = dtLocalISO.match(pattern);
+      if (match) {
+        let detectedTz = match[0];
+        
+        // Handle common timezone abbreviations
+        const tzMap: { [key: string]: string } = {
+          'UTC': 'UTC',
+          'GMT': 'UTC',
+          'EST': 'America/New_York',
+          'EDT': 'America/New_York',
+          'CST': 'America/Chicago',
+          'CDT': 'America/Chicago',
+          'MST': 'America/Denver',
+          'MDT': 'America/Denver',
+          'PST': 'America/Los_Angeles',
+          'PDT': 'America/Los_Angeles'
+        };
+        
+        if (tzMap[detectedTz.toUpperCase()]) {
+          detectedTz = tzMap[detectedTz.toUpperCase()];
+        }
+        
+        // Check if this timezone is valid and update fromZone
+        if (timezones.includes(detectedTz)) {
+          setFromZone(detectedTz);
+        }
+        break;
+      }
+    }
+  }, [dtLocalISO, timezones]);
+
   function norm(s: any){ return (s||"").toString().toLowerCase().replace(/[^a-z0-9]+/g,''); }
   function fuzzySearch(q: any){
     if(!q) return timezones;
@@ -130,21 +181,141 @@ export default function TimezoneConverter() {
   // parse a user wall-clock (datetime-local) in a given IANA tz into an instant using Intl only
   function parseLocalInputToDate(localValue: any, fromTz: any){
     if(!localValue) return null;
-    const [datePart, timePart] = localValue.split('T');
-    if(!datePart) return null;
-    const [y,m,d] = datePart.split('-').map(Number);
-    const [hh,mm] = (timePart||'00:00').split(':').map(Number);
+    
+    // Check if the input contains timezone information
+    const timezonePatterns = [
+      /\b(UTC|GMT)\b/i,
+      /\b(EST|EDT|CST|CDT|MST|MDT|PST|PDT)\b/i,
+      /\b(Asia\/[A-Za-z_]+)\b/i,
+      /\b(Europe\/[A-Za-z_]+)\b/i,
+      /\b(America\/[A-Za-z_]+)\b/i,
+      /\b(Africa\/[A-Za-z_]+)\b/i,
+      /\b(Australia\/[A-Za-z_]+)\b/i,
+      /\b(Pacific\/[A-Za-z_]+)\b/i,
+      /\b(Atlantic\/[A-Za-z_]+)\b/i,
+      /\b(Indian\/[A-Za-z_]+)\b/i
+    ];
+    
+    let inputTz = fromTz; // Default to fromTz
+    let cleanValue = localValue;
+    
+    // Check if input contains timezone info
+    for (const pattern of timezonePatterns) {
+      const match = localValue.match(pattern);
+      if (match) {
+        let detectedTz = match[0];
+        
+        // Handle common timezone abbreviations
+        const tzMap: { [key: string]: string } = {
+          'UTC': 'UTC',
+          'GMT': 'UTC',
+          'EST': 'America/New_York',
+          'EDT': 'America/New_York',
+          'CST': 'America/Chicago',
+          'CDT': 'America/Chicago',
+          'MST': 'America/Denver',
+          'MDT': 'America/Denver',
+          'PST': 'America/Los_Angeles',
+          'PDT': 'America/Los_Angeles'
+        };
+        
+        if (tzMap[detectedTz.toUpperCase()]) {
+          detectedTz = tzMap[detectedTz.toUpperCase()];
+        }
+        
+        if (timezones.includes(detectedTz)) {
+          inputTz = detectedTz;
+          // Remove timezone from the value for parsing
+          cleanValue = localValue.replace(pattern, '').trim();
+        }
+        break;
+      }
+    }
+    
     try{
-      // Create a UTC date with the input values
-      const utcDate = new Date(Date.UTC(y, m-1, d, hh, mm));
+      // Try to parse as ISO format first (YYYY-MM-DDTHH:MM)
+      if (cleanValue.includes('T') && cleanValue.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)) {
+        const [datePart, timePart] = cleanValue.split('T');
+        const [y,m,d] = datePart.split('-').map(Number);
+        const [hh,mm] = (timePart||'00:00').split(':').map(Number);
+        
+        // Create a date object with the input values (this will be in local browser timezone)
+        const localDate = new Date(y, m-1, d, hh, mm);
+        
+        // Now we need to find what UTC time corresponds to this local time in inputTz
+        // We'll use a binary search approach to find the correct UTC time
+        let low = new Date(localDate.getTime() - 24 * 60 * 60 * 1000); // 24 hours before
+        let high = new Date(localDate.getTime() + 24 * 60 * 60 * 1000); // 24 hours after
+        
+        // Use Intl to format the UTC date in the inputTz to see what local time it represents
+        const formatter = new Intl.DateTimeFormat('en-CA', { 
+          timeZone: inputTz, 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit', 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false 
+        });
+        
+        // Find the UTC time that when formatted in inputTz gives us our target local time
+        const targetLocal = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+        
+        // Binary search for the correct UTC time
+        for (let i = 0; i < 20; i++) { // Limit iterations
+          const mid = new Date((low.getTime() + high.getTime()) / 2);
+          const formatted = formatter.format(mid).replace(/\//g, '-');
+          const formattedISO = formatted.replace(/(\d{2})-(\d{2})-(\d{4})/, '$3-$1-$2');
+          
+          if (formattedISO === targetLocal) {
+            return mid;
+          } else if (formattedISO < targetLocal) {
+            low = mid;
+          } else {
+            high = mid;
+          }
+        }
+        
+        // Fallback: return the original date if binary search fails
+        return localDate;
+      }
       
-      // Get the timezone offset for fromTz at this UTC time
-      const utcTime = utcDate.getTime();
-      const localTimeInTz = new Date(utcDate.toLocaleString("en-US", {timeZone: fromTz}));
-      const offset = utcTime - localTimeInTz.getTime();
+      // Try to parse as natural language date (e.g., "Oct 24, 2025, 8:30")
+      const naturalDate = new Date(cleanValue);
+      if (!isNaN(naturalDate.getTime())) {
+        // For natural language dates, use the same binary search approach
+        let low = new Date(naturalDate.getTime() - 24 * 60 * 60 * 1000);
+        let high = new Date(naturalDate.getTime() + 24 * 60 * 60 * 1000);
+        
+        const formatter = new Intl.DateTimeFormat('en-CA', { 
+          timeZone: inputTz, 
+          year: 'numeric', 
+          month: '2-digit', 
+          day: '2-digit', 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false 
+        });
+        
+        for (let i = 0; i < 20; i++) {
+          const mid = new Date((low.getTime() + high.getTime()) / 2);
+          const formatted = formatter.format(mid);
+          const formattedISO = formatted.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$1-$2');
+          const naturalISO = naturalDate.toISOString().slice(0,16);
+          
+          if (formattedISO === naturalISO.slice(0,16)) {
+            return mid;
+          } else if (formattedISO < naturalISO.slice(0,16)) {
+            low = mid;
+          } else {
+            high = mid;
+          }
+        }
+        
+        return naturalDate;
+      }
       
-      // Return the UTC time that represents the local time in fromTz
-      return new Date(utcTime + offset);
+      return null;
     }catch(e){
       console.error('Error parsing date:', e);
       return null;
@@ -308,9 +479,9 @@ export default function TimezoneConverter() {
     return { startIdx: start, endIdx: end, startISO: segToISO(start), endISO: segToISO(end) };
   }, [segments, dtLocalISO]);
 
-  // slider init
+  // slider init - only update when dtLocalISO or fromZone changes, but not when slider is being dragged
   useEffect(()=>{
-    if(!dtLocalISO || !fromZone) return;
+    if(!dtLocalISO || !fromZone || isSliderDragging) return;
     
     // Parse the input datetime as if it's in the from timezone
     const instant = parseLocalInputToDate(dtLocalISO, fromZone);
@@ -326,7 +497,7 @@ export default function TimezoneConverter() {
     const idx = hh*2 + (mm>=30?1:0);
     
     setSliderIndex(idx);
-  }, [dtLocalISO, fromZone]);
+  }, [dtLocalISO, fromZone, isSliderDragging]);
 
   function onSliderChange(idx: number){ 
     setSliderIndex(idx); 
@@ -335,6 +506,14 @@ export default function TimezoneConverter() {
     const mm = (idx%2)*30; 
     const newISO = `${datePart}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; 
     setDtLocalISO(newISO); 
+  }
+
+  function onSliderMouseDown() {
+    setIsSliderDragging(true);
+  }
+
+  function onSliderMouseUp() {
+    setIsSliderDragging(false);
   }
 
   function handleSwap(){
@@ -452,10 +631,15 @@ Text: \"${text}\"`;
         <h1 className="text-2xl font-bold text-slate-900 mb-3">Timezone Converter</h1>
 
         {/* row 1: inputs with vertical separator */}
-        <div className="flex flex-col md:flex-row gap-4 mb-4 items-end">
+        <div className="flex flex-col md:flex-row gap-4 mb-4 md:items-end">
           <div className="flex-1">
             <label className="text-sm text-slate-600">Date & time</label>
-            <input type="datetime-local" value={dtLocalISO} onChange={e=>setDtLocalISO(e.target.value)} className="w-full mt-2 rounded-lg border px-3 py-2 bg-white" />
+            <input 
+              type="datetime-local" 
+              value={dtLocalISO} 
+              onChange={e=>setDtLocalISO(e.target.value)} 
+              className="w-full mt-2 rounded-lg border px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            />
           </div>
 
           <div className="hidden md:block w-px bg-gray-200 h-12" />
@@ -489,8 +673,8 @@ Text: \"${text}\"`;
                     </div>
                   )}
                 </div>
-                <button aria-label="Swap" onClick={handleSwap} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200">⇄</button>
                 <button title="Working hours" onClick={()=>setShowToSettings(true)} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200">⚙️</button>
+                <button aria-label="Swap" onClick={handleSwap} className="p-2 rounded-md bg-gray-100 hover:bg-gray-200">⇄</button>
               </div>
             </div>
           </div>
@@ -498,52 +682,64 @@ Text: \"${text}\"`;
 
         {/* settings popups */}
         {showFromSettings && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/40">
-            <div className="w-full max-w-md bg-white rounded-lg p-4 shadow-lg">
-              <h3 className="font-semibold mb-2">From — Working hours (half-hour steps)</h3>
-              <div className="flex gap-2 mb-3">
-                <select value={fromWorkStart} onChange={e=>setFromWorkStart(Number(e.target.value))} className="flex-1 rounded border px-2 py-1">
-                  {timeOptions.map(opt => (
-                    <option key={opt.i} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <select value={fromWorkEnd} onChange={e=>setFromWorkEnd(Number(e.target.value))} className="flex-1 rounded border px-2 py-1">
-                  {timeOptions.map(opt => (
-                    <option key={opt.i} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+          <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
+            <div className="w-full max-w-md bg-white rounded-xl p-6 shadow-xl">
+              <h3 className="font-semibold text-lg mb-4">From — Working hours (half-hour steps)</h3>
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <div className="flex-1">
+                  <label className="text-sm text-gray-600 mb-1 block">Start time</label>
+                  <select value={fromWorkStart} onChange={e=>setFromWorkStart(Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    {timeOptions.map(opt => (
+                      <option key={opt.i} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-sm text-gray-600 mb-1 block">End time</label>
+                  <select value={fromWorkEnd} onChange={e=>setFromWorkEnd(Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    {timeOptions.map(opt => (
+                      <option key={opt.i} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="flex gap-2 mb-4">
-                {Object.keys(presets).map(p => <button key={p} onClick={()=>applyPresetFor('from',p)} className="px-3 py-1 rounded border">{p}</button>)}
+              <div className="flex flex-wrap gap-2 mb-6">
+                {Object.keys(presets).map(p => <button key={p} onClick={()=>applyPresetFor('from',p)} className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors">{p}</button>)}
               </div>
-              <div className="flex justify-end gap-2">
-                <button onClick={()=>setShowFromSettings(false)} className="px-3 py-1 rounded bg-gray-100">Close</button>
+              <div className="flex justify-end gap-3">
+                <button onClick={()=>setShowFromSettings(false)} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">Close</button>
               </div>
             </div>
           </div>
         )}
 
         {showToSettings && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/40">
-            <div className="w-full max-w-md bg-white rounded-lg p-4 shadow-lg">
-              <h3 className="font-semibold mb-2">To — Working hours (half-hour steps)</h3>
-              <div className="flex gap-2 mb-3">
-                <select value={toWorkStart} onChange={e=>setToWorkStart(Number(e.target.value))} className="flex-1 rounded border px-2 py-1">
-                  {timeOptions.map(opt => (
-                    <option key={opt.i} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <select value={toWorkEnd} onChange={e=>setToWorkEnd(Number(e.target.value))} className="flex-1 rounded border px-2 py-1">
-                  {timeOptions.map(opt => (
-                    <option key={opt.i} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+          <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
+            <div className="w-full max-w-md bg-white rounded-xl p-6 shadow-xl">
+              <h3 className="font-semibold text-lg mb-4">To — Working hours (half-hour steps)</h3>
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <div className="flex-1">
+                  <label className="text-sm text-gray-600 mb-1 block">Start time</label>
+                  <select value={toWorkStart} onChange={e=>setToWorkStart(Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    {timeOptions.map(opt => (
+                      <option key={opt.i} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-sm text-gray-600 mb-1 block">End time</label>
+                  <select value={toWorkEnd} onChange={e=>setToWorkEnd(Number(e.target.value))} className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    {timeOptions.map(opt => (
+                      <option key={opt.i} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="flex gap-2 mb-4">
-                {Object.keys(presets).map(p => <button key={p} onClick={()=>applyPresetFor('to',p)} className="px-3 py-1 rounded border">{p}</button>)}
+              <div className="flex flex-wrap gap-2 mb-6">
+                {Object.keys(presets).map(p => <button key={p} onClick={()=>applyPresetFor('to',p)} className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors">{p}</button>)}
               </div>
-              <div className="flex justify-end gap-2">
-                <button onClick={()=>setShowToSettings(false)} className="px-3 py-1 rounded bg-gray-100">Close</button>
+              <div className="flex justify-end gap-3">
+                <button onClick={()=>setShowToSettings(false)} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">Close</button>
               </div>
             </div>
           </div>
@@ -552,10 +748,12 @@ Text: \"${text}\"`;
         {/* natural language */}
         {hasBuiltInAI && (
           <div className="mb-4 p-3 rounded-md bg-white/50 border">
-            <div className="flex gap-3 items-center">
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
               <input value={nlInput} onChange={e=>setNlInput(e.target.value)} className="flex-1 rounded-lg px-3 py-2 border bg-white" placeholder="Enter natural language time expression" />
-              <button onClick={onParseNL} className="px-4 py-2 rounded-lg bg-slate-800 text-white">Parse</button>
-              <a className="text-sm text-slate-600 underline" href="https://developer.chrome.com/docs/ai/built-in/" target="_blank" rel="noreferrer">Chrome AI guide</a>
+              <div className="flex gap-2">
+                <button onClick={onParseNL} className="px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors">Parse</button>
+                <a className="text-sm text-slate-600 underline self-center" href="https://developer.chrome.com/docs/ai/built-in/" target="_blank" rel="noreferrer">Guide</a>
+              </div>
             </div>
           </div>
         )}
@@ -563,7 +761,18 @@ Text: \"${text}\"`;
         {/* slider + overlap */}
         <div className="mb-4">
           <label className="text-sm text-slate-600">Quick hour slider (half-hour steps)</label>
-          <input type="range" min={0} max={47} value={sliderIndex ?? 0} onChange={e=>onSliderChange(Number(e.target.value))} className="w-full mt-2" />
+          <input 
+            type="range" 
+            min={0} 
+            max={47} 
+            value={sliderIndex ?? 0} 
+            onChange={e=>onSliderChange(Number(e.target.value))} 
+            onMouseDown={onSliderMouseDown}
+            onMouseUp={onSliderMouseUp}
+            onTouchStart={onSliderMouseDown}
+            onTouchEnd={onSliderMouseUp}
+            className="w-full mt-2" 
+          />
           <div className="mt-2 flex gap-1 items-center">
             {segments.map(s => <div key={s.i} title={`${String(s.hh).padStart(2,'0')}:${s.mm===0?'00':'30'}`} style={{flex:1,height:14,borderRadius:3,background:s.status==='both'?'#4ade80':s.status==='partial'?'#fde68a':'#fecaca'}} />)}
           </div>
