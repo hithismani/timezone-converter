@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 // Timezone Converter — Settings popup, presets (Morning/Evening), humanized sentence format
 export default function TimezoneConverter() {
@@ -7,8 +7,8 @@ export default function TimezoneConverter() {
   const [toZone, setToZone] = useState<string | null>("UTC");
   const [dtLocalISO, setDtLocalISO] = useState("");
 
-  const [fromQuery, setFromQuery] = useState("");
-  const [toQuery, setToQuery] = useState("");
+  const [fromQuery, setFromQuery] = useState<string | null>(null);
+  const [toQuery, setToQuery] = useState<string | null>(null);
   const [fromResults, setFromResults] = useState<string[]>([]);
   const [toResults, setToResults] = useState<string[]>([]);
   const [fromFocused, setFromFocused] = useState(false);
@@ -112,20 +112,20 @@ export default function TimezoneConverter() {
   }
 
   useEffect(() => {
-    if (fromQuery === '') {
-      setFromResults([]);
+    if (fromFocused) {
+      setFromResults(fromQuery === '' ? timezones : fuzzySearch(fromQuery));
     } else {
-      setFromResults(fuzzySearch(fromQuery));
+      setFromResults([]);
     }
-  }, [fromQuery]);
+  }, [fromQuery, fromFocused]);
   
   useEffect(() => {
-    if (toQuery === '') {
-      setToResults([]);
+    if (toFocused) {
+      setToResults(toQuery === '' ? timezones : fuzzySearch(toQuery));
     } else {
-      setToResults(fuzzySearch(toQuery));
+      setToResults([]);
     }
-  }, [toQuery]);
+  }, [toQuery, toFocused]);
 
   // parse a user wall-clock (datetime-local) in a given IANA tz into an instant using Intl only
   function parseLocalInputToDate(localValue: any, fromTz: any){
@@ -135,17 +135,20 @@ export default function TimezoneConverter() {
     const [y,m,d] = datePart.split('-').map(Number);
     const [hh,mm] = (timePart||'00:00').split(':').map(Number);
     try{
-      // interpret the *wall-clock* as if in fromTz by using Intl formatToParts around a guessed UTC
-      const guessedUtc = new Date(Date.UTC(y, m-1, d, hh, mm));
-      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: fromTz, hour12:false, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
-      const parts: any = fmt.formatToParts(guessedUtc).reduce((a: any, p: any)=>{ 
-        if(p.type!=='literal') a[p.type]=p.value; 
-        return a; 
-      }, {});
-      if(!parts.year) return null;
-      const epoch = Date.UTC(Number(parts.year), Number(parts.month)-1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
-      return new Date(epoch);
-    }catch(e){ return null; }
+      // Create a UTC date with the input values
+      const utcDate = new Date(Date.UTC(y, m-1, d, hh, mm));
+      
+      // Get the timezone offset for fromTz at this UTC time
+      const utcTime = utcDate.getTime();
+      const localTimeInTz = new Date(utcDate.toLocaleString("en-US", {timeZone: fromTz}));
+      const offset = utcTime - localTimeInTz.getTime();
+      
+      // Return the UTC time that represents the local time in fromTz
+      return new Date(utcTime + offset);
+    }catch(e){
+      console.error('Error parsing date:', e);
+      return null;
+    }
   }
 
   function formatForZone(date: any, tz: any){ 
@@ -254,8 +257,31 @@ export default function TimezoneConverter() {
       const instant = parseLocalInputToDate(localISO, fromZone);
       const fromLocal = getLocalHourDecimal(instant, fromZone);
       const toLocal = getLocalHourDecimal(instant, toZone);
-      const inFrom = fromLocal != null && ((fromWorkStart <= fromWorkEnd) ? (fromLocal >= fromWorkStart && fromLocal < fromWorkEnd) : (fromLocal >= fromWorkStart || fromLocal < fromWorkEnd));
-      const inTo = toLocal != null && ((toWorkStart <= toWorkEnd) ? (toLocal >= toWorkStart && toLocal < toWorkEnd) : (toLocal >= toWorkStart || toLocal < toWorkEnd));
+      
+      // Check if time is within working hours for from timezone
+      let inFrom = false;
+      if (fromLocal !== null) {
+        if (fromWorkStart <= fromWorkEnd) {
+          // Normal range (e.g., 9-17)
+          inFrom = fromLocal >= fromWorkStart && fromLocal < fromWorkEnd;
+        } else {
+          // Overnight range (e.g., 22-6)
+          inFrom = fromLocal >= fromWorkStart || fromLocal < fromWorkEnd;
+        }
+      }
+      
+      // Check if time is within working hours for to timezone
+      let inTo = false;
+      if (toLocal !== null) {
+        if (toWorkStart <= toWorkEnd) {
+          // Normal range (e.g., 9-17)
+          inTo = toLocal >= toWorkStart && toLocal < toWorkEnd;
+        } else {
+          // Overnight range (e.g., 22-6)
+          inTo = toLocal >= toWorkStart || toLocal < toWorkEnd;
+        }
+      }
+      
       let status = 'none';
       if(inFrom && inTo) status = 'both';
       else if(inFrom || inTo) status = 'partial';
@@ -284,13 +310,23 @@ export default function TimezoneConverter() {
 
   // slider init
   useEffect(()=>{
-    if(!dtLocalISO) return; 
-    const parts = (dtLocalISO.match(/(\d+)/g) || []).map(Number); 
-    const hh = parts[3] || 0; 
-    const mm = parts[4] || 0; 
-    const idx = hh*2 + (mm>=30?1:0); 
-    setSliderIndex(idx); 
-  }, [dtLocalISO]);
+    if(!dtLocalISO || !fromZone) return;
+    
+    // Parse the input datetime as if it's in the from timezone
+    const instant = parseLocalInputToDate(dtLocalISO, fromZone);
+    if (!instant) return;
+    
+    // Get the local hour in the from timezone
+    const localHourDecimal = getLocalHourDecimal(instant, fromZone);
+    if (localHourDecimal === null) return;
+    
+    // Convert to slider index (48 half-hour segments)
+    const hh = Math.floor(localHourDecimal);
+    const mm = (localHourDecimal % 1) * 60;
+    const idx = hh*2 + (mm>=30?1:0);
+    
+    setSliderIndex(idx);
+  }, [dtLocalISO, fromZone]);
 
   function onSliderChange(idx: number){ 
     setSliderIndex(idx); 
@@ -312,11 +348,6 @@ export default function TimezoneConverter() {
     setFromWorkEnd(toWorkEnd);
     setToWorkStart(tmpStart);
     setToWorkEnd(tmpEnd);
-    
-    if(inputInstant && toZone){
-      const newLocal = instantToLocalISO(inputInstant, toZone);
-      if(newLocal) setDtLocalISO(newLocal);
-    }
   }
 
   // natural language parsing (built-in browser AI only)
@@ -434,10 +465,11 @@ Text: \"${text}\"`;
               <label className="text-sm text-slate-600">From</label>
               <div className="mt-2 flex items-center gap-2 relative">
                 <div className="flex-1 relative">
-                  <input value={fromQuery || fromZone || ''} onChange={e=>setFromQuery(e.target.value)} onFocus={()=>setFromFocused(true)} onBlur={(e) => { if (!e.target.value) setFromQuery(''); setFromFocused(false); }} className="w-full rounded-lg border px-3 py-2 bg-white" placeholder="Type or pick timezone" />
+                  <input value={fromQuery !== null ? fromQuery : fromZone || ''} onChange={e=>setFromQuery(e.target.value)} onFocus={()=>{setFromFocused(true); setFromQuery('');}} onBlur={(e) => { if (!e.target.value) { setFromQuery(null); setFromZone(null); } setFromFocused(false); }} className="w-full rounded-lg border px-3 py-2 pr-10 bg-white" placeholder="Type or pick timezone" />
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">▼</span>
                   {fromFocused && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-md shadow max-h-40 overflow-auto z-10">
-                      {fromResults.map(tz => <div key={tz} onMouseDown={()=>{ setFromZone(tz); setFromQuery(''); setFromFocused(false); }} className="px-3 py-2 cursor-pointer hover:bg-gray-100">{tz} <span className="text-xs text-slate-400 ml-2">{formatForZone(new Date(),tz)}</span></div>)}
+                      {fromResults.map(tz => <div key={tz} onMouseDown={()=>{ setFromZone(tz); setFromQuery(null); setFromFocused(false); }} className="px-3 py-2 cursor-pointer hover:bg-gray-100">{tz} <span className="text-xs text-slate-400 ml-2">{formatForZone(new Date(),tz)}</span></div>)}
                     </div>
                   )}
                 </div>
@@ -449,10 +481,11 @@ Text: \"${text}\"`;
               <label className="text-sm text-slate-600">To</label>
               <div className="mt-2 flex items-center gap-2 relative">
                 <div className="flex-1 relative">
-                  <input value={toQuery || toZone || ''} onChange={e=>setToQuery(e.target.value)} onFocus={()=>setToFocused(true)} onBlur={(e) => { if (!e.target.value) setToQuery(''); setToFocused(false); }} className="w-full rounded-lg border px-3 py-2 bg-white" placeholder="Type or pick timezone" />
+                  <input value={toQuery !== null ? toQuery : toZone || ''} onChange={e=>setToQuery(e.target.value)} onFocus={()=>{setToFocused(true); setToQuery('');}} onBlur={(e) => { if (!e.target.value) { setToQuery(null); setToZone(null); } setToFocused(false); }} className="w-full rounded-lg border px-3 py-2 pr-10 bg-white" placeholder="Type or pick timezone" />
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">▼</span>
                   {toFocused && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-md shadow max-h-40 overflow-auto z-10">
-                      {toResults.map(tz => <div key={tz} onMouseDown={()=>{ setToZone(tz); setToQuery(''); setToFocused(false); }} className="px-3 py-2 cursor-pointer hover:bg-gray-100">{tz} <span className="text-xs text-slate-400 ml-2">{formatForZone(new Date(),tz)}</span></div>)}
+                      {toResults.map(tz => <div key={tz} onMouseDown={()=>{ setToZone(tz); setToQuery(null); setToFocused(false); }} className="px-3 py-2 cursor-pointer hover:bg-gray-100">{tz} <span className="text-xs text-slate-400 ml-2">{formatForZone(new Date(),tz)}</span></div>)}
                     </div>
                   )}
                 </div>
@@ -536,6 +569,22 @@ Text: \"${text}\"`;
           </div>
           <div className="mt-2 text-sm text-slate-700">
             {overlapWindow ? (<div>Overlap window (both working): <strong>{instantToLocalISO(parseLocalInputToDate(overlapWindow.startISO, fromZone), fromZone).slice(0,16).replace('T',' ')} — {instantToLocalISO(parseLocalInputToDate(overlapWindow.endISO, fromZone), fromZone).slice(0,16).replace('T',' ')}</strong> (in {fromZone} local)</div>) : (<div>No full overlap on this date.</div>)}
+          </div>
+          <div className="mt-3 text-xs text-slate-600">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded" style={{background: '#4ade80'}}></div>
+                <span>Both timezones working</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded" style={{background: '#fde68a'}}></div>
+                <span>One timezone working</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded" style={{background: '#fecaca'}}></div>
+                <span>Neither timezone working</span>
+              </div>
+            </div>
           </div>
         </div>
 
