@@ -471,13 +471,13 @@ export default function TimezoneConverter() {
     return `${sign}${h}${m ? `:${String(m).padStart(2,'0')}` : ''} hrs`;
   }
 
-  // compute availability segments (288 5-minute segments) representing the selected date in fromZone
+  // compute availability segments (96 15-minute segments) representing the selected date in fromZone
   function buildSegments(){
     const segs: any[] = [];
     if(!dtLocalISO) return segs;
-    for(let i=0;i<288;i++){
-      const hh = Math.floor(i/12);
-      const mm = (i%12)*5;
+    for(let i=0;i<96;i++){
+      const hh = Math.floor(i/4);
+      const mm = (i%4)*15;
       const datePart = dtLocalISO.split('T')[0];
       const localISO = `${datePart}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
       const instant = parseLocalInputToDate(localISO, fromZone);
@@ -547,10 +547,10 @@ export default function TimezoneConverter() {
     const localHourDecimal = getLocalHourDecimal(instant, fromZone);
     if (localHourDecimal === null) return;
     
-    // Convert to slider index (288 5-minute segments)
+    // Convert to slider index (96 15-minute segments)
     const hh = Math.floor(localHourDecimal);
     const mm = (localHourDecimal % 1) * 60;
-    const idx = hh*12 + Math.floor(mm/5);
+    const idx = hh*4 + Math.floor(mm/15);
     
     setSliderIndex(idx);
   }, [dtLocalISO, fromZone, isSliderDragging]);
@@ -558,8 +558,8 @@ export default function TimezoneConverter() {
   function onSliderChange(idx: number){ 
     setSliderIndex(idx); 
     const datePart = dtLocalISO.split('T')[0] || new Date().toISOString().slice(0,10); 
-    const hh = Math.floor(idx/12); 
-    const mm = (idx%12)*5; 
+    const hh = Math.floor(idx/4); 
+    const mm = (idx%4)*15; 
     const newISO = `${datePart}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; 
     setDtLocalISO(newISO); 
   }
@@ -656,6 +656,83 @@ Text: \"${text}\"`;
 
   const sentence = humanSentence();
 
+  // Clock component for displaying time visually
+  function ClockDisplay({ time, timezone, label }: { time: Date | null, timezone: string | null, label: string }) {
+    if (!time || !timezone) return null;
+    
+    // Format the time in the specific timezone
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    const parts = formatter.formatToParts(time).reduce((acc: any, part: any) => {
+      if (part.type !== 'literal') acc[part.type] = part.value;
+      return acc;
+    }, {});
+    
+    const hours = parseInt(parts.hour);
+    const minutes = parseInt(parts.minute);
+    
+    // Calculate angles for clock hands
+    const hourAngle = (hours % 12) * 30 + (minutes / 60) * 30;
+    const minuteAngle = minutes * 6;
+    
+    return (
+      <div className="flex flex-col items-center">
+        <div className="text-xs text-slate-500 mb-2">{label}</div>
+        <div className="relative w-16 h-16 rounded-full border-2 border-gray-300 bg-white">
+          {/* Clock face */}
+          <div className="absolute inset-0 rounded-full">
+            {/* Hour markers */}
+            {Array.from({length: 12}, (_, i) => (
+              <div
+                key={i}
+                className="absolute w-0.5 h-1 bg-gray-400"
+                style={{
+                  top: '2px',
+                  left: '50%',
+                  transformOrigin: '50% 30px',
+                  transform: `rotate(${i * 30}deg) translateX(-50%)`
+                }}
+              />
+            ))}
+            
+            {/* Hour hand */}
+            <div
+              className="absolute w-0.5 h-4 bg-gray-800 origin-bottom"
+              style={{
+                top: '50%',
+                left: '50%',
+                transform: `translate(-50%, -100%) rotate(${hourAngle}deg)`
+              }}
+            />
+            
+            {/* Minute hand */}
+            <div
+              className="absolute w-0.5 h-6 bg-gray-600 origin-bottom"
+              style={{
+                top: '50%',
+                left: '50%',
+                transform: `translate(-50%, -100%) rotate(${minuteAngle}deg)`
+              }}
+            />
+            
+            
+            {/* Center dot */}
+            <div className="absolute w-1 h-1 bg-gray-800 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+          </div>
+        </div>
+        <div className="text-xs text-slate-600 mt-1 font-mono">
+          {String(hours).padStart(2,'0')}:{String(minutes).padStart(2,'0')}
+        </div>
+        <div className="text-xs text-slate-500">{timezone}</div>
+      </div>
+    );
+  }
+
   // apply preset helper
   function applyPresetFor(which: string, name: string){
     const p = (presets as any)[name];
@@ -669,10 +746,10 @@ Text: \"${text}\"`;
     }
   }
 
-  // Generate time options for select elements (5-minute intervals)
-  const timeOptions = Array.from({length:288}).map((_,i)=>{
-    const hh=Math.floor(i/12);
-    const mm=(i%12)*5;
+  // Generate time options for select elements (15-minute intervals)
+  const timeOptions = Array.from({length:96}).map((_,i)=>{
+    const hh=Math.floor(i/4);
+    const mm=(i%4)*15;
     const v=hh+(mm/60);
     return { 
       i, 
@@ -683,7 +760,7 @@ Text: \"${text}\"`;
 
   return (
     <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-5xl p-6 rounded-2xl bg-white/95 backdrop-blur-md border border-gray-100 shadow-sm">
+      <div className="w-full max-w-5xl p-6 rounded-2xl bg-white/95 border border-gray-100 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900 mb-3">Timezone Converter</h1>
 
         {/* row 1: inputs with vertical separator */}
@@ -817,11 +894,11 @@ Text: \"${text}\"`;
 
         {/* slider + overlap */}
         <div className="mb-4">
-          <label className="text-sm text-slate-600">Quick time slider (5-minute steps)</label>
+          <label className="text-sm text-slate-600">Quick time slider (15-minute steps)</label>
           <input 
             type="range" 
             min={0} 
-            max={287} 
+            max={95} 
             value={sliderIndex ?? 0} 
             onChange={e=>onSliderChange(Number(e.target.value))} 
             onMouseDown={onSliderMouseDown}
@@ -862,11 +939,40 @@ Text: \"${text}\"`;
         {/* result */}
         <div className="p-4 rounded-xl bg-white/80 border border-gray-100 shadow-sm">
           <div className="text-xs text-slate-500 mb-1">Converted time</div>
-          <div className="text-2xl font-semibold text-slate-900">{convertedStr ? `${convertedStr} ${toZone}` : '—'}</div>
+          <div className="text-2xl font-semibold text-slate-900 wrap-break-word">{convertedStr ? `${convertedStr} ${toZone}` : '—'}</div>
 
           {convertedStr && sentence && (
-            <div className="mt-3 text-slate-700 text-sm">
-              <strong>{sentence}</strong>
+            <div className="mt-4 space-y-2">
+              <div className="text-sm text-slate-600">
+                <span className="font-medium text-slate-800">{inputFormatted}</span> in <span className="font-medium text-blue-600">{fromZone}</span>
+              </div>
+              <div className="text-sm text-slate-600">
+                converts to <span className="font-medium text-slate-800">{convertedStr}</span> in <span className="font-medium text-green-600">{toZone}</span>
+              </div>
+              {tzDiffHours !== null && (
+                <div className="text-sm text-slate-500">
+                  <span className="font-medium">{diffLabel(tzDiffHours)}</span> time difference
+                  {dayRelation && dayRelation !== 'SAME DAY' && (
+                    <span className="ml-2 text-orange-600 font-medium">({dayRelation.toLowerCase()})</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Clock displays */}
+          {inputInstant && (
+            <div className="mt-6 flex justify-center gap-8">
+              <ClockDisplay 
+                time={inputInstant} 
+                timezone={fromZone} 
+                label="Input Time" 
+              />
+              <ClockDisplay 
+                time={inputInstant} 
+                timezone={toZone} 
+                label="Converted Time" 
+              />
             </div>
           )}
         </div>
