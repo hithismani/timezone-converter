@@ -67,8 +67,8 @@ Uses the [add-to-calendar-button](https://github.com/add2cal/add-to-calendar-but
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/timezonehelper.git
-   cd timezonehelper
+   git clone git@github.com:hithismani/timezone-converter.git
+   cd timezone-converter
    ```
 
 2. **Install dependencies**
@@ -141,10 +141,21 @@ The app automatically updates URL parameters:
 ```
 timezonehelper/
 ├── index.html          # HTML entry point with meta tags
-├── index.tsx           # Main React component
+├── App.tsx             # Main React component (TimezoneConverter)
 ├── main.tsx            # React entry point
 ├── index.css           # Global styles
 ├── public/             # Static assets (OG images, etc.)
+├── src/                # Source code directory
+│   ├── components/     # React components
+│   │   ├── ClockDisplay.tsx      # Analog clock display component
+│   │   ├── NaturalLanguageInput.tsx # AI-powered natural language input
+│   │   ├── TimezoneInput.tsx      # Timezone selection input component
+│   │   ├── ui/                    # UI component library (shadcn/ui)
+│   │   └── index.ts              # Component barrel exports
+│   ├── lib/            # Utility functions
+│   │   └── utils.ts    # Timezone conversion and formatting utilities
+│   └── types/          # TypeScript type definitions
+│       └── index.ts    # TypeScript interfaces and types
 ├── package.json        # Dependencies and scripts
 ├── tsconfig.json       # TypeScript configuration
 ├── vite.config.ts      # Vite configuration
@@ -153,17 +164,44 @@ timezonehelper/
 
 ## 🧪 Key Functions
 
-### `parseLocalInputToDate(localValue, fromTz)`
+### Utility Functions (`src/lib/utils.ts`)
+
+#### `parseLocalInputToDate(localValue, fromTz, timezones?)`
 Parses a local datetime string in a specific timezone and converts it to a UTC Date object. Uses binary search with `Intl.DateTimeFormat` to accurately handle DST transitions.
 
-### `instantToLocalISO(instant, tz)`
+#### `instantToLocalISO(instant, tz)`
 Converts a UTC Date object to a local ISO string (YYYY-MM-DDTHH:MM) in a specific timezone.
 
-### `buildSegments()`
-Creates 96 segments (15-minute intervals) representing the selected date, calculating availability status for each segment based on working hours.
-
-### `getLocalHourDecimal(instant, tz)`
+#### `getLocalHourDecimal(instant, tz)`
 Gets the local hour as a decimal value (e.g., 14.5 for 2:30 PM) in a specific timezone.
+
+#### `formatForZone(date, tz)`
+Formats a Date object for display in a specific timezone using locale-aware formatting.
+
+#### `formatTime12Hour(hh, mm)`
+Converts 24-hour time to 12-hour AM/PM format.
+
+#### `tzOffsetMinutes(tz, instant)`
+Calculates the timezone offset in minutes for a given timezone and instant.
+
+#### `diffLabel(val)`
+Formats time difference as a human-readable string (e.g., "+5:30 hrs", "-3 hrs").
+
+### Components (`src/components/`)
+
+#### `ClockDisplay`
+Displays an analog clock visualization with hour and minute hands, showing the time in a specific timezone.
+
+#### `NaturalLanguageInput`
+AI-powered input field that parses natural language time expressions (requires Chrome/Edge with built-in AI).
+
+#### `TimezoneInput`
+Reusable timezone selection input with search functionality and dropdown suggestions.
+
+### Main Component (`App.tsx`)
+
+#### `buildSegments()`
+Creates 96 segments (15-minute intervals) representing the selected date, calculating availability status for each segment based on working hours. This function is memoized within the component to ensure reactivity to working hours changes.
 
 ## 🤝 Contributing
 
@@ -175,6 +213,9 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 - Maintain accessibility standards
 - Test across different browsers and devices
 - Update documentation as needed
+- Keep components modular and reusable (see `src/components/`)
+- Place utility functions in `src/lib/utils.ts`
+- Define shared types in `src/types/index.ts`
 
 ## 📝 License
 
