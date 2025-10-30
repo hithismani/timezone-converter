@@ -915,14 +915,14 @@ Text: \"${text}\"`;
     return (
       <div className="flex flex-col items-center">
         <div className="text-sm font-medium text-slate-700 mb-3">{label}</div>
-        <div className="relative w-20 h-20 rounded-full border-2 border-teal-200 bg-gradient-to-br from-white to-teal-50 shadow-md">
+        <div className="relative w-20 h-20 rounded-full border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50 shadow-md">
           {/* Clock face */}
           <div className="absolute inset-0 rounded-full">
             {/* Hour markers */}
             {Array.from({length: 12}, (_, i) => (
               <div
                 key={i}
-                className="absolute w-1 h-1.5 bg-teal-400"
+                className="absolute w-1 h-1.5 bg-gray-400"
                 style={{
                   top: '3px',
                   left: '50%',
@@ -934,7 +934,7 @@ Text: \"${text}\"`;
             
             {/* Hour hand */}
             <div
-              className="absolute w-1 h-5 bg-teal-800 origin-bottom rounded-full"
+              className="absolute w-1 h-5 bg-gray-800 origin-bottom rounded-full"
               style={{
                 top: '50%',
                 left: '50%',
@@ -944,7 +944,7 @@ Text: \"${text}\"`;
             
             {/* Minute hand */}
             <div
-              className="absolute w-1 h-7 bg-teal-600 origin-bottom rounded-full"
+              className="absolute w-1 h-7 bg-gray-600 origin-bottom rounded-full"
               style={{
                 top: '50%',
                 left: '50%',
@@ -953,7 +953,7 @@ Text: \"${text}\"`;
             />
             
             {/* Center dot */}
-            <div className="absolute w-2 h-2 bg-teal-800 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 shadow-sm" />
+            <div className="absolute w-2 h-2 bg-gray-800 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 shadow-sm" />
           </div>
         </div>
         <div className="text-sm font-semibold text-slate-800 mt-2 font-mono">
@@ -990,11 +990,11 @@ Text: \"${text}\"`;
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50 to-teal-50 flex items-start justify-center py-8 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-gray-50 flex items-start justify-center py-8 px-4">
       <div className="w-full max-w-7xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-teal-600 to-teal-500 bg-clip-text text-transparent mb-2">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-600 to-gray-500 bg-clip-text text-transparent mb-2">
             Timezone Converter
           </h1>
           <p className="text-slate-600 text-sm">Convert times between timezones and find optimal meeting windows</p>
@@ -1002,7 +1002,7 @@ Text: \"${text}\"`;
 
         {/* Natural Language Input - Moved to top */}
         {hasBuiltInAI && (
-          <div className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-teal-500 via-teal-600 to-teal-500 shadow-lg backdrop-blur-sm">
+          <div className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-gray-500 via-gray-600 to-gray-500 shadow-lg backdrop-blur-sm">
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
               <div className="flex-1 relative">
                 <input 
@@ -1018,7 +1018,7 @@ Text: \"${text}\"`;
               <div className="flex gap-2">
                 <button 
                   onClick={onParseNL} 
-                  className="px-6 py-3 rounded-xl bg-white text-teal-600 hover:bg-teal-50 font-semibold transition-all shadow-md hover:shadow-lg hover:scale-105" 
+                  className="px-6 py-3 rounded-xl bg-white text-gray-600 hover:bg-gray-50 font-semibold transition-all shadow-md hover:shadow-lg hover:scale-105" 
                   tabIndex={9}
                 >
                   Parse
@@ -1042,7 +1042,7 @@ Text: \"${text}\"`;
           {/* Left Column - Input Section */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-teal-500 to-teal-600 px-6 py-4">
+              <div className="bg-gradient-to-r from-gray-500 to-gray-600 px-6 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm text-white font-bold text-lg shadow-md">1</div>
@@ -1055,14 +1055,14 @@ Text: \"${text}\"`;
                 {/* Date & Time */}
                 <div>
                   <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                    <span className="text-teal-500">📅</span>
+                    <span className="text-gray-500">📅</span>
                     Date & Time
                   </label>
                   <input
                     type="datetime-local"
                     value={dtLocalISO}
                     onChange={e=>setDtLocalISO(e.target.value)}
-                    className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-700 font-medium"
+                    className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-all text-slate-700 font-medium"
                     tabIndex={1}
                   />
                 </div>
@@ -1072,7 +1072,7 @@ Text: \"${text}\"`;
                   {/* From Timezone - 5 cols on desktop, full width on mobile */}
                   <div className="md:col-span-5">
                     <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                      <span className="text-teal-500">🌍</span>
+                      <span className="text-gray-500">🌍</span>
                       From Timezone
                     </label>
                     <div className="flex items-center gap-2">
@@ -1082,7 +1082,7 @@ Text: \"${text}\"`;
                           onChange={e=>setFromQuery(e.target.value)} 
                           onFocus={()=>{setFromFocused(true); setFromQuery('');}} 
                           onBlur={(e) => { if (!e.target.value) { setFromQuery(null); setFromZone(null); } setFromFocused(false); }} 
-                          className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 pr-10 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-700" 
+                          className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 pr-10 bg-slate-50 focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-all text-slate-700" 
                           placeholder="Search timezone..." 
                           tabIndex={2} 
                         />
@@ -1093,7 +1093,7 @@ Text: \"${text}\"`;
                               <div 
                                 key={tz} 
                                 onMouseDown={()=>{ setFromZone(tz); setFromQuery(null); setFromFocused(false); }} 
-                                className="px-4 py-3 cursor-pointer hover:bg-teal-50 transition-colors border-b border-slate-100 last:border-b-0"
+                                className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors border-b border-slate-100 last:border-b-0"
                               >
                                 <div className="font-medium text-slate-700">{tz}</div>
                                 <div className="text-xs text-slate-500 mt-1">{formatForZone(new Date(),tz)}</div>
@@ -1105,7 +1105,7 @@ Text: \"${text}\"`;
                       <button 
                         title="Working hours settings" 
                         onClick={()=>setShowFromSettings(true)} 
-                        className="p-3 rounded-xl bg-teal-100 hover:bg-teal-200 text-teal-700 transition-all hover:scale-105 shadow-sm" 
+                        className="p-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-all hover:scale-105 shadow-sm" 
                         tabIndex={3}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1121,7 +1121,7 @@ Text: \"${text}\"`;
                     <button
                       aria-label="Swap timezones"
                       onClick={handleSwap}
-                      className="p-3 rounded-full bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white shadow-lg transition-all transform hover:scale-110 hover:rotate-180 duration-300 md:rotate-0 rotate-90"
+                      className="p-3 rounded-full bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white shadow-lg transition-all transform hover:scale-110 hover:rotate-180 duration-300 md:rotate-0 rotate-90"
                       tabIndex={6}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1133,7 +1133,7 @@ Text: \"${text}\"`;
                   {/* To Timezone - 5 cols on desktop, full width on mobile */}
                   <div className="md:col-span-5">
                     <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                      <span className="text-teal-500">🎯</span>
+                      <span className="text-gray-500">🎯</span>
                       To Timezone
                     </label>
                     <div className="flex items-center gap-2">
@@ -1143,7 +1143,7 @@ Text: \"${text}\"`;
                           onChange={e=>setToQuery(e.target.value)} 
                           onFocus={()=>{setToFocused(true); setToQuery('');}} 
                           onBlur={(e) => { if (!e.target.value) { setToQuery(null); setToZone(null); } setToFocused(false); }} 
-                          className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 pr-10 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-700" 
+                          className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 pr-10 bg-slate-50 focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-all text-slate-700" 
                           placeholder="Search timezone..." 
                           tabIndex={4} 
                         />
@@ -1154,7 +1154,7 @@ Text: \"${text}\"`;
                               <div 
                                 key={tz} 
                                 onMouseDown={()=>{ setToZone(tz); setToQuery(null); setToFocused(false); }} 
-                                className="px-4 py-3 cursor-pointer hover:bg-teal-50 transition-colors border-b border-slate-100 last:border-b-0"
+                                className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors border-b border-slate-100 last:border-b-0"
                               >
                                 <div className="font-medium text-slate-700">{tz}</div>
                                 <div className="text-xs text-slate-500 mt-1">{formatForZone(new Date(),tz)}</div>
@@ -1166,7 +1166,7 @@ Text: \"${text}\"`;
                       <button 
                         title="Working hours settings" 
                         onClick={()=>setShowToSettings(true)} 
-                        className="p-3 rounded-xl bg-teal-100 hover:bg-teal-200 text-teal-700 transition-all hover:scale-105 shadow-sm" 
+                        className="p-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-all hover:scale-105 shadow-sm" 
                         tabIndex={5}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1180,14 +1180,14 @@ Text: \"${text}\"`;
 
                 {/* Human-readable sentence */}
                 {sentence && (
-                  <div className="bg-gradient-to-r from-teal-50 to-teal-50 rounded-xl p-4 border-l-4 border-teal-500">
+                  <div className="bg-gradient-to-r from-gray-50 to-gray-50 rounded-xl p-4 border-l-4 border-gray-500">
                     <div className="text-sm font-medium text-slate-600 mb-1">Summary</div>
                     <div className="text-slate-800">{sentence}</div>
                   </div>
                 )}
 
                 {/* Working Hours Visualization */}
-                <div className="bg-gradient-to-br from-slate-50 to-teal-50 rounded-xl p-5 border border-slate-200">
+                <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-5 border border-slate-200">
                   <div className="flex items-center mb-4">
                     <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500 text-white font-bold mr-3 shadow-md">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1268,11 +1268,11 @@ Text: \"${text}\"`;
                           className="absolute -top-3 z-10 transform -translate-x-1/2"
                           style={{ left: `${positionIndicator.positionPercent}%` }}
                         >
-                          <div className="bg-teal-600 text-white text-xs font-bold px-2 py-0.5 rounded shadow-md whitespace-nowrap">
+                          <div className="bg-gray-600 text-white text-xs font-bold px-2 py-0.5 rounded shadow-md whitespace-nowrap">
                             <div>{formatTime12Hour(positionIndicator.hh, positionIndicator.mm)}</div>
                             <div className="text-[10px] font-normal opacity-90">{fromZone.split('/').pop() || fromZone}</div>
                           </div>
-                          <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-teal-600 mx-auto"></div>
+                          <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-600 mx-auto"></div>
                         </div>
                       )}
                       
@@ -1347,7 +1347,7 @@ Text: \"${text}\"`;
           {/* Right Column - Conversion Result */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden sticky top-6">
-              <div className="bg-gradient-to-r from-teal-500 to-teal-600 px-6 py-4">
+              <div className="bg-gradient-to-r from-gray-500 to-gray-600 px-6 py-4">
                 <div className="flex items-center gap-3">
                   <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm text-white font-bold text-lg shadow-md">2</div>
                   <h2 className="text-xl font-semibold text-white">Result</h2>
@@ -1363,10 +1363,10 @@ Text: \"${text}\"`;
                       <>
                         {/* Time - MOST PROMINENT with timezone */}
                         <div className="mb-3">
-                          <div className="text-6xl font-bold text-teal-700 mb-1">
+                          <div className="text-6xl font-bold text-gray-700 mb-1">
                             {inputFormatted.split(', ').slice(-1)[0]}
                           </div>
-                          <div className="text-xs text-teal-400">{fromZone}</div>
+                          <div className="text-xs text-gray-400">{fromZone}</div>
                         </div>
                         
                         {/* Date with Year merged - Secondary */}
@@ -1390,10 +1390,10 @@ Text: \"${text}\"`;
                       <>
                         {/* Time - MOST PROMINENT with timezone */}
                         <div className="mb-3">
-                          <div className="text-6xl font-bold text-teal-700 mb-1">
+                          <div className="text-6xl font-bold text-gray-700 mb-1">
                             {convertedStr.split(', ').slice(-1)[0]}
                           </div>
-                          <div className="text-xs text-teal-400">{toZone}</div>
+                          <div className="text-xs text-gray-400">{toZone}</div>
                         </div>
                         
                         {/* Date with Year merged - Secondary */}
@@ -1472,14 +1472,14 @@ Text: \"${text}\"`;
         {showFromSettings && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 p-4 backdrop-blur-sm animate-fadeIn" onClick={()=>setShowFromSettings(false)}>
             <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 animate-slideUp" onClick={(e)=>e.stopPropagation()}>
-              <div className="bg-gradient-to-r from-teal-500 to-teal-600 px-6 py-4 rounded-t-2xl">
+              <div className="bg-gradient-to-r from-gray-500 to-gray-600 px-6 py-4 rounded-t-2xl">
                 <h3 className="font-bold text-xl text-white">From Timezone — Working Hours</h3>
               </div>
               <div className="p-6">
                 <div className="grid sm:grid-cols-2 gap-4 mb-6">
                   <div>
                     <label className="text-sm font-semibold text-slate-700 mb-2 block">Start Time</label>
-                    <select value={fromWorkStart} onChange={e=>setFromWorkStart(Number(e.target.value))} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-700">
+                    <select value={fromWorkStart} onChange={e=>setFromWorkStart(Number(e.target.value))} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-slate-700">
                       {timeOptions.map(opt => (
                         <option key={opt.i} value={opt.value}>{opt.label}</option>
                       ))}
@@ -1487,7 +1487,7 @@ Text: \"${text}\"`;
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700 mb-2 block">End Time</label>
-                    <select value={fromWorkEnd} onChange={e=>setFromWorkEnd(Number(e.target.value))} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-700">
+                    <select value={fromWorkEnd} onChange={e=>setFromWorkEnd(Number(e.target.value))} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-slate-700">
                       {timeOptions.map(opt => (
                         <option key={opt.i} value={opt.value}>{opt.label}</option>
                       ))}
@@ -1501,7 +1501,7 @@ Text: \"${text}\"`;
                       <button 
                         key={p} 
                         onClick={()=>applyPresetFor('from',p)} 
-                        className="px-4 py-2 rounded-xl bg-teal-100 hover:bg-teal-200 text-teal-700 font-medium transition-all hover:scale-105 shadow-sm"
+                        className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium transition-all hover:scale-105 shadow-sm"
                       >
                         {p}
                       </button>
@@ -1511,7 +1511,7 @@ Text: \"${text}\"`;
                 <div className="flex justify-end">
                   <button 
                     onClick={()=>setShowFromSettings(false)} 
-                    className="px-6 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-all shadow-md hover:shadow-lg"
+                    className="px-6 py-3 rounded-xl bg-gray-600 hover:bg-gray-700 text-white font-semibold transition-all shadow-md hover:shadow-lg"
                   >
                     Done
                   </button>
@@ -1524,14 +1524,14 @@ Text: \"${text}\"`;
         {showToSettings && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 p-4 backdrop-blur-sm animate-fadeIn" onClick={()=>setShowToSettings(false)}>
             <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 animate-slideUp" onClick={(e)=>e.stopPropagation()}>
-              <div className="bg-gradient-to-r from-teal-500 to-teal-600 px-6 py-4 rounded-t-2xl">
+              <div className="bg-gradient-to-r from-gray-500 to-gray-600 px-6 py-4 rounded-t-2xl">
                 <h3 className="font-bold text-xl text-white">To Timezone — Working Hours</h3>
               </div>
               <div className="p-6">
                 <div className="grid sm:grid-cols-2 gap-4 mb-6">
                   <div>
                     <label className="text-sm font-semibold text-slate-700 mb-2 block">Start Time</label>
-                    <select value={toWorkStart} onChange={e=>setToWorkStart(Number(e.target.value))} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-700">
+                    <select value={toWorkStart} onChange={e=>setToWorkStart(Number(e.target.value))} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-slate-700">
                       {timeOptions.map(opt => (
                         <option key={opt.i} value={opt.value}>{opt.label}</option>
                       ))}
@@ -1539,7 +1539,7 @@ Text: \"${text}\"`;
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700 mb-2 block">End Time</label>
-                    <select value={toWorkEnd} onChange={e=>setToWorkEnd(Number(e.target.value))} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-700">
+                    <select value={toWorkEnd} onChange={e=>setToWorkEnd(Number(e.target.value))} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 bg-slate-50 focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-slate-700">
                       {timeOptions.map(opt => (
                         <option key={opt.i} value={opt.value}>{opt.label}</option>
                       ))}
@@ -1553,7 +1553,7 @@ Text: \"${text}\"`;
                       <button 
                         key={p} 
                         onClick={()=>applyPresetFor('to',p)} 
-                        className="px-4 py-2 rounded-xl bg-teal-100 hover:bg-teal-200 text-teal-700 font-medium transition-all hover:scale-105 shadow-sm"
+                        className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium transition-all hover:scale-105 shadow-sm"
                       >
                         {p}
                       </button>
@@ -1563,7 +1563,7 @@ Text: \"${text}\"`;
                 <div className="flex justify-end">
                   <button 
                     onClick={()=>setShowToSettings(false)} 
-                    className="px-6 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-all shadow-md hover:shadow-lg"
+                    className="px-6 py-3 rounded-xl bg-gray-600 hover:bg-gray-700 text-white font-semibold transition-all shadow-md hover:shadow-lg"
                   >
                     Done
                   </button>
