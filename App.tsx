@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { ClockDisplay, NaturalLanguageInput } from "./src/components";
+import { formatForZone, parseLocalInputToDate, instantToLocalISO, getLocalHourDecimal, formatTime12Hour, shortTimeForZone, formatTimeWithDateIfDifferent, getShortTimezoneName, tzOffsetMinutes, localYMD, diffLabel, fuzzySearch } from "./src/lib/utils";
+import { PRESETS } from "./src/types";
 
 // Timezone Converter — Settings popup, presets (Morning/Evening), humanized sentence format
 export default function TimezoneConverter() {
@@ -141,12 +144,7 @@ export default function TimezoneConverter() {
     }
   }, [timezones, fromZone, toZone]);
 
-  const presets = {
-    "Morning": [9, 12],
-    "Workday": [9, 17],
-    "Evening": [17, 21],
-    "All day": [0, 24]
-  };
+  const presets = PRESETS;
 
   const aliasMap = useMemo(() => ({ 
     CET: ["Europe/Paris"], 
@@ -220,298 +218,33 @@ export default function TimezoneConverter() {
   }, [dtLocalISO, timezones]);
 
   function norm(s: any){ return (s||"").toString().toLowerCase().replace(/[^a-z0-9]+/g,''); }
-  function fuzzySearch(q: any){
+  function fuzzySearchInternal(q: any){
     if(!q) return timezones;
-    const nq = norm(q);
-    const set = new Set<string>();
-    Object.keys(aliasMap).forEach(k => { 
-      if(norm(k).includes(nq)) (aliasMap as any)[k].forEach((tz: string) => set.add(tz)); 
-    });
-    timezones.forEach(tz => { 
-      if(norm(tz).includes(nq) || norm(tz.replace(/\//g,' ')).includes(nq)) set.add(tz); 
-    });
-    return Array.from(set);
+    return fuzzySearch(q, timezones, aliasMap);
   }
 
   useEffect(() => {
     if (fromFocused) {
-      setFromResults(fromQuery === '' ? timezones : fuzzySearch(fromQuery));
+      setFromResults(fromQuery === '' ? timezones : fuzzySearchInternal(fromQuery || ''));
     } else {
       setFromResults([]);
     }
-  }, [fromQuery, fromFocused]);
+  }, [fromQuery, fromFocused, timezones, aliasMap]);
   
   useEffect(() => {
     if (toFocused) {
-      setToResults(toQuery === '' ? timezones : fuzzySearch(toQuery));
+      setToResults(toQuery === '' ? timezones : fuzzySearchInternal(toQuery || ''));
     } else {
       setToResults([]);
     }
-  }, [toQuery, toFocused]);
+  }, [toQuery, toFocused, timezones, aliasMap]);
 
   // parse a user wall-clock (datetime-local) in a given IANA tz into an instant using Intl only
-  function parseLocalInputToDate(localValue: any, fromTz: any){
-    if(!localValue || !fromTz) return null;
-    
-    // Check if the input contains timezone information
-    const timezonePatterns = [
-      /\b(UTC|GMT)\b/i,
-      /\b(EST|EDT|CST|CDT|MST|MDT|PST|PDT)\b/i,
-      /\b(Asia\/[A-Za-z_]+)\b/i,
-      /\b(Europe\/[A-Za-z_]+)\b/i,
-      /\b(America\/[A-Za-z_]+)\b/i,
-      /\b(Africa\/[A-Za-z_]+)\b/i,
-      /\b(Australia\/[A-Za-z_]+)\b/i,
-      /\b(Pacific\/[A-Za-z_]+)\b/i,
-      /\b(Atlantic\/[A-Za-z_]+)\b/i,
-      /\b(Indian\/[A-Za-z_]+)\b/i
-    ];
-    
-    let inputTz = fromTz; // Default to fromTz
-    let cleanValue = localValue;
-    
-    // Check if input contains timezone info
-    for (const pattern of timezonePatterns) {
-      const match = localValue.match(pattern);
-      if (match) {
-        let detectedTz = match[0];
-        
-        // Handle common timezone abbreviations
-        const tzMap: { [key: string]: string } = {
-          'UTC': 'UTC',
-          'GMT': 'UTC',
-          'EST': 'America/New_York',
-          'EDT': 'America/New_York',
-          'CST': 'America/Chicago',
-          'CDT': 'America/Chicago',
-          'MST': 'America/Denver',
-          'MDT': 'America/Denver',
-          'PST': 'America/Los_Angeles',
-          'PDT': 'America/Los_Angeles'
-        };
-        
-        if (tzMap[detectedTz.toUpperCase()]) {
-          detectedTz = tzMap[detectedTz.toUpperCase()];
-        }
-        
-        if (timezones.includes(detectedTz)) {
-          inputTz = detectedTz;
-          // Remove timezone from the value for parsing
-          cleanValue = localValue.replace(pattern, '').trim();
-        }
-        break;
-      }
-    }
-    
-    try{
-      // Try to parse as ISO format first (YYYY-MM-DDTHH:MM)
-      if (cleanValue.includes('T') && cleanValue.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)) {
-        const [datePart, timePart] = cleanValue.split('T');
-        const [y,m,d] = datePart.split('-').map(Number);
-        const [hh,mm] = (timePart||'00:00').split(':').map(Number);
-        
-        // Create a date string in the format we need: YYYY-MM-DDTHH:MM
-        const targetLocal = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
-        
-        // Use a more reliable approach: create a date around noon UTC on that day,
-        // then adjust based on the timezone offset
-        const noonUTC = new Date(Date.UTC(y, m-1, d, 12, 0, 0));
-        
-        // Get the offset for this timezone at this date
-        const formatter = new Intl.DateTimeFormat('en-CA', { 
-          timeZone: inputTz, 
-          year: 'numeric', 
-          month: '2-digit', 
-          day: '2-digit', 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          hour12: false 
-        });
-        
-        // Find the UTC time that when formatted in inputTz gives us our target local time
-        // Use binary search with wider bounds to handle all timezones
-        let low = new Date(noonUTC.getTime() - 18 * 60 * 60 * 1000); // 18 hours before (covers UTC-12)
-        let high = new Date(noonUTC.getTime() + 18 * 60 * 60 * 1000); // 18 hours after (covers UTC+12)
-        
-        for (let i = 0; i < 50; i++) { // Increased iterations for better accuracy
-          const mid = new Date((low.getTime() + high.getTime()) / 2);
-          const parts: any = {};
-          formatter.formatToParts(mid).forEach((p: any) => {
-            if(p.type !== 'literal') parts[p.type] = p.value;
-          });
-          
-          if (!parts.year || !parts.month || !parts.day || !parts.hour || !parts.minute) {
-            break;
-          }
-          
-          const formattedISO = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
-          
-          if (formattedISO === targetLocal) {
-            return mid;
-          } else if (formattedISO < targetLocal) {
-            low = mid;
-          } else {
-            high = mid;
-          }
-          
-          // Check if we're close enough (within 1 minute)
-          if (Math.abs(low.getTime() - high.getTime()) < 60000) {
-            return mid;
-          }
-        }
-        
-        // Fallback: calculate using timezone offset
-        // Create a test UTC date and find the offset
-        const testDateUTC = new Date(Date.UTC(y, m-1, d, 12, 0, 0)); // Use noon to avoid DST issues
-        const testFormatted = formatter.formatToParts(testDateUTC).reduce((acc: any, p: any) => {
-          if(p.type !== 'literal') acc[p.type] = p.value;
-          return acc;
-        }, {});
-        
-        if (testFormatted.year && testFormatted.month && testFormatted.day && testFormatted.hour && testFormatted.minute) {
-          // Calculate what time it is in the timezone for noon UTC
-          const tzHour = Number(testFormatted.hour);
-          const tzMinute = Number(testFormatted.minute);
-          
-          // Calculate the offset (difference between UTC noon and timezone time)
-          const tzTimeMinutes = tzHour * 60 + tzMinute;
-          const utcTimeMinutes = 12 * 60; // noon UTC
-          let offsetMinutes = tzTimeMinutes - utcTimeMinutes;
-          
-          // Normalize offset to -12 to +12 hours range
-          if (offsetMinutes > 12 * 60) offsetMinutes -= 24 * 60;
-          if (offsetMinutes < -12 * 60) offsetMinutes += 24 * 60;
-          
-          // Now calculate what UTC time corresponds to our target local time
-          const targetMinutes = hh * 60 + mm;
-          const utcTargetMinutes = targetMinutes - offsetMinutes;
-          
-          // Convert back to UTC date
-          let utcHours = Math.floor(utcTargetMinutes / 60);
-          let utcMins = utcTargetMinutes % 60;
-          
-          // Handle day boundaries
-          if (utcMins < 0) {
-            utcMins += 60;
-            utcHours -= 1;
-          }
-          if (utcHours < 0) {
-            utcHours += 24;
-          }
-          if (utcHours >= 24) {
-            utcHours -= 24;
-          }
-          
-          return new Date(Date.UTC(y, m-1, d, utcHours, utcMins, 0));
-        }
-        
-        return testDateUTC;
-      }
-      
-      // Try to parse as natural language date (e.g., "Oct 24, 2025, 8:30")
-      const naturalDate = new Date(cleanValue);
-      if (!isNaN(naturalDate.getTime())) {
-        // For natural language dates, treat as UTC and convert
-        const y = naturalDate.getUTCFullYear();
-        const m = naturalDate.getUTCMonth() + 1;
-        const d = naturalDate.getUTCDate();
-        const hh = naturalDate.getUTCHours();
-        const mm = naturalDate.getUTCMinutes();
-        
-        const targetLocal = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
-        const noonUTC = new Date(Date.UTC(y, m-1, d, 12, 0, 0));
-        
-        const formatter = new Intl.DateTimeFormat('en-CA', { 
-          timeZone: inputTz, 
-          year: 'numeric', 
-          month: '2-digit', 
-          day: '2-digit', 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          hour12: false 
-        });
-        
-        let low = new Date(noonUTC.getTime() - 12 * 60 * 60 * 1000);
-        let high = new Date(noonUTC.getTime() + 12 * 60 * 60 * 1000);
-        
-        for (let i = 0; i < 30; i++) {
-          const mid = new Date((low.getTime() + high.getTime()) / 2);
-          const parts: any = {};
-          formatter.formatToParts(mid).forEach((p: any) => {
-            if(p.type !== 'literal') parts[p.type] = p.value;
-          });
-          
-          if (!parts.year || !parts.month || !parts.day || !parts.hour || !parts.minute) {
-            break;
-          }
-          
-          const formattedISO = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
-          
-          if (formattedISO === targetLocal) {
-            return mid;
-          } else if (formattedISO < targetLocal) {
-            low = mid;
-          } else {
-            high = mid;
-          }
-          
-          if (Math.abs(low.getTime() - high.getTime()) < 60000) {
-            return mid;
-          }
-        }
-        
-        return naturalDate;
-      }
-      
-      return null;
-    }catch(e){
-      console.error('Error parsing date:', e);
-      return null;
-    }
+  function parseLocalInputToDateInternal(localValue: any, fromTz: any){
+    return parseLocalInputToDate(localValue, fromTz, timezones);
   }
 
-  function formatForZone(date: any, tz: any){ 
-    if(!date) return '—'; 
-    try{ 
-      return new Intl.DateTimeFormat(undefined, { timeZone: tz, dateStyle:'medium', timeStyle:'short' }).format(date); 
-    } catch { 
-      return date.toString(); 
-    } 
-  }
-
-  function instantToLocalISO(instant: any, tz: any){
-    if(!instant) return '';
-    try{
-      const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour12:false, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
-      const parts: any = fmt.formatToParts(instant).reduce((a: any, p: any)=>{ 
-        if(p.type!=='literal') a[p.type]=p.value; 
-        return a; 
-      }, {});
-      if(!parts.year) return '';
-      return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
-    } catch { return ''; }
-  }
-
-  function getLocalHourDecimal(instant: any, tz: any){
-    try {
-      const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour12:false, hour:'2-digit', minute:'2-digit' });
-      const parts: any = fmt.formatToParts(instant).reduce((a: any, p: any)=>{ 
-        if(p.type!=='literal') a[p.type]=p.value; 
-        return a; 
-      }, {});
-      if(!parts.hour) return null;
-      return Number(parts.hour) + Number(parts.minute)/60;
-    } catch { return null; }
-  }
-
-  // Helper function to format time in 12-hour format with AM/PM
-  function formatTime12Hour(hh: number, mm: number): string {
-    const hour12 = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    return `${hour12}:${String(mm).padStart(2,'0')} ${ampm}`;
-  }
-
-  const inputInstant = useMemo(()=>fromZone ? parseLocalInputToDate(dtLocalISO, fromZone) : null, [dtLocalISO, fromZone]);
+  const inputInstant = useMemo(()=>fromZone ? parseLocalInputToDateInternal(dtLocalISO, fromZone) : null, [dtLocalISO, fromZone, timezones]);
   const convertedStr = useMemo(()=>inputInstant && toZone ? formatForZone(inputInstant, toZone) : null, [inputInstant, toZone]);
 
   // Calculate position indicator data - FROM timezone (purple indicator)
@@ -559,19 +292,6 @@ export default function TimezoneConverter() {
     return { hh, mm, positionPercent };
   }, [inputInstant, toZone, fromZone, positionIndicator]);
 
-  // timezone offsets in minutes for an instant (via Intl)
-  function tzOffsetMinutes(tz: any, instant: any){
-    try {
-      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12:false, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
-      const parts: any = fmt.formatToParts(instant).reduce((a: any, p: any)=>{ 
-        if(p.type!=='literal') a[p.type]=p.value; 
-        return a; 
-      }, {});
-      if(!parts.year) return null;
-      const epochLocal = Date.UTC(Number(parts.year), Number(parts.month)-1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
-      return (epochLocal - instant.getTime())/60000;
-    } catch { return null; }
-  }
 
   const tzDiffHours = useMemo(() => {
     if(!inputInstant || !fromZone || !toZone) return null;
@@ -581,23 +301,12 @@ export default function TimezoneConverter() {
     return (offTo - offFrom) / 60;
   }, [inputInstant, fromZone, toZone]);
 
-  function localYMD(tz: any, instant: any){
-    try {
-      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12:false, year:'numeric', month:'2-digit', day:'2-digit' });
-      const parts: any = fmt.formatToParts(instant).reduce((a: any, p: any)=>{ 
-        if(p.type!=='literal') a[p.type]=p.value; 
-        return a; 
-      }, {});
-      if(!parts.year) return null;
-      return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day) };
-    } catch { return null; }
-  }
 
   function formatLocalISOForDisplay(localISO: string, tz: string){
     if(!localISO || !tz) return '—';
     try {
       // Use inputInstant if available, otherwise parse
-      const instant = parseLocalInputToDate(localISO, tz);
+      const instant = parseLocalInputToDateInternal(localISO, tz);
       if(!instant) return '—';
       
       // Format it nicely
@@ -621,7 +330,7 @@ export default function TimezoneConverter() {
     if(!dtLocalISO || !fromZone) return null;
     // Format directly from dtLocalISO to ensure accuracy
     // Parse it fresh to get the correct instant for display
-    const instant = parseLocalInputToDate(dtLocalISO, fromZone);
+    const instant = parseLocalInputToDateInternal(dtLocalISO, fromZone);
     if(!instant) return null;
     
     const formatter = new Intl.DateTimeFormat('en-US', {
@@ -634,7 +343,7 @@ export default function TimezoneConverter() {
       hour12: true
     });
     return formatter.format(instant);
-  }, [dtLocalISO, fromZone]);
+  }, [dtLocalISO, fromZone, timezones]);
 
   const dayRelation = useMemo(() => {
     if(!inputInstant || !fromZone || !toZone) return null;
@@ -648,14 +357,6 @@ export default function TimezoneConverter() {
     return 'SAME DAY';
   }, [inputInstant, fromZone, toZone]);
 
-  function diffLabel(val: any){
-    if(val == null) return '±?? hrs';
-    const sign = val >= 0 ? '+' : '-';
-    const abs = Math.abs(val);
-    const h = Math.floor(abs);
-    const m = Math.round((abs - h) * 60);
-    return `${sign}${h}${m ? `:${String(m).padStart(2,'0')}` : ''} hrs`;
-  }
 
   // Format date/time for add-to-calendar-button
   const calendarEventData = useMemo(() => {
@@ -716,7 +417,7 @@ export default function TimezoneConverter() {
   }, [inputInstant, fromZone, toZone, dtLocalISO, tzDiffHours, dayRelation, inputFormatted]);
 
   // compute availability segments (96 15-minute segments) representing the selected date in fromZone
-  function buildSegments(){
+  const segments = useMemo(() => {
     const segs: any[] = [];
     if(!dtLocalISO) return segs;
     for(let i=0;i<96;i++){
@@ -724,7 +425,7 @@ export default function TimezoneConverter() {
       const mm = (i%4)*15;
       const datePart = dtLocalISO.split('T')[0];
       const localISO = `${datePart}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
-      const instant = parseLocalInputToDate(localISO, fromZone);
+      const instant = parseLocalInputToDateInternal(localISO, fromZone);
       const fromLocal = getLocalHourDecimal(instant, fromZone);
       const toLocal = getLocalHourDecimal(instant, toZone);
       
@@ -759,9 +460,7 @@ export default function TimezoneConverter() {
       segs.push({ i, hh, mm, instant, status });
     }
     return segs;
-  }
-
-  const segments = useMemo(()=>buildSegments(), [dtLocalISO, fromZone, toZone, fromWorkStart, fromWorkEnd, toWorkStart, toWorkEnd]);
+  }, [dtLocalISO, fromZone, toZone, fromWorkStart, fromWorkEnd, toWorkStart, toWorkEnd]);
 
   // find first contiguous overlap window of 'both'
   const overlapWindow = useMemo(()=>{
@@ -791,7 +490,7 @@ export default function TimezoneConverter() {
       startInstant,
       endInstant
     };
-  }, [segments, fromZone]);
+  }, [segments, fromZone, toZone]);
 
   // sliderIndex is derived from positionIndicator - no need for separate useEffect
   // Removed redundant calculation that was recalculating parseLocalInputToDate
@@ -903,45 +602,6 @@ Text: \"${text}\"`;
     if(!ok) alert('AI could not parse the phrase.'); 
   }
 
-  function shortTimeForZone(date: any, tz: any){ 
-    if(!date) return '—'; 
-    try{ 
-      const fmt = new Intl.DateTimeFormat(undefined, { timeZone: tz, timeStyle: 'short' }); 
-      return fmt.format(date); 
-    } catch { 
-      return formatForZone(date,tz); 
-    } 
-  }
-
-  function formatTimeWithDateIfDifferent(instant: Date, tz: string, baseInstant: Date, baseTz: string){
-    if(!instant) return '—';
-    try {
-      // Get date in target timezone
-      const tzDateParts = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(instant);
-      // Get date in base timezone (fromZone)
-      const baseDateParts = new Intl.DateTimeFormat('en-US', { timeZone: baseTz, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(baseInstant);
-      
-      const tzDateStr = `${tzDateParts.find(p => p.type === 'year')?.value}-${tzDateParts.find(p => p.type === 'month')?.value}-${tzDateParts.find(p => p.type === 'day')?.value}`;
-      const baseDateStr = `${baseDateParts.find(p => p.type === 'year')?.value}-${baseDateParts.find(p => p.type === 'month')?.value}-${baseDateParts.find(p => p.type === 'day')?.value}`;
-      
-      const timeStr = shortTimeForZone(instant, tz);
-      const dateDiffers = tzDateStr !== baseDateStr;
-      
-      if(dateDiffers) {
-        const dateStr = new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short', day: 'numeric', year: 'numeric' }).format(instant);
-        return `${dateStr} ${timeStr}`;
-      }
-      return timeStr;
-    } catch {
-      return shortTimeForZone(instant, tz);
-    }
-  }
-
-  function getShortTimezoneName(tz: string){
-    if(!tz) return '';
-    const parts = tz.split('/');
-    return parts[parts.length - 1].replace(/_/g, ' ');
-  }
 
   function humanSentence(){
     if(!inputInstant || !convertedStr) return null;
@@ -962,81 +622,6 @@ Text: \"${text}\"`;
 
   const sentence = humanSentence();
 
-  // Clock component for displaying time visually
-  function ClockDisplay({ time, timezone, label }: { time: Date | null, timezone: string | null, label: string }) {
-    if (!time || !timezone) return null;
-    
-    // Format the time in the specific timezone
-    const formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: timezone,
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    const parts = formatter.formatToParts(time).reduce((acc: any, part: any) => {
-      if (part.type !== 'literal') acc[part.type] = part.value;
-      return acc;
-    }, {});
-    
-    const hours = parseInt(parts.hour);
-    const minutes = parseInt(parts.minute);
-    
-    // Calculate angles for clock hands
-    const hourAngle = (hours % 12) * 30 + (minutes / 60) * 30;
-    const minuteAngle = minutes * 6;
-    
-    return (
-      <div className="flex flex-col items-center">
-        <div className="text-sm font-medium text-slate-700 mb-3">{label}</div>
-        <div className="relative w-20 h-20 rounded-full border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50 shadow-md">
-          {/* Clock face */}
-          <div className="absolute inset-0 rounded-full">
-            {/* Hour markers */}
-            {Array.from({length: 12}, (_, i) => (
-              <div
-                key={i}
-                className="absolute w-1 h-1.5 bg-gray-400"
-                style={{
-                  top: '3px',
-                  left: '50%',
-                  transformOrigin: '50% 37px',
-                  transform: `rotate(${i * 30}deg) translateX(-50%)`
-                }}
-              />
-            ))}
-            
-            {/* Hour hand */}
-            <div
-              className="absolute w-1 h-5 bg-gray-800 origin-bottom rounded-full"
-              style={{
-                top: '50%',
-                left: '50%',
-                transform: `translate(-50%, -100%) rotate(${hourAngle}deg)`
-              }}
-            />
-            
-            {/* Minute hand */}
-            <div
-              className="absolute w-1 h-7 bg-gray-600 origin-bottom rounded-full"
-              style={{
-                top: '50%',
-                left: '50%',
-                transform: `translate(-50%, -100%) rotate(${minuteAngle}deg)`
-              }}
-            />
-            
-            {/* Center dot */}
-            <div className="absolute w-2 h-2 bg-gray-800 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 shadow-sm" />
-          </div>
-        </div>
-        <div className="text-sm font-semibold text-slate-800 mt-2 font-mono">
-          {String(hours).padStart(2,'0')}:{String(minutes).padStart(2,'0')}
-        </div>
-        <div className="text-xs font-medium text-slate-600 mt-1">{timezone}</div>
-      </div>
-    );
-  }
 
   // apply preset helper
   function applyPresetFor(which: string, name: string){
@@ -1075,40 +660,12 @@ Text: \"${text}\"`;
         </div>
 
         {/* Natural Language Input - Moved to top */}
-        {hasBuiltInAI && (
-          <div className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-gray-500 via-gray-600 to-gray-500 shadow-lg backdrop-blur-sm">
-            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-              <div className="flex-1 relative">
-                <input 
-                  value={nlInput} 
-                  onChange={e=>setNlInput(e.target.value)} 
-                  onKeyDown={e => e.key === 'Enter' && onParseNL()}
-                  className="w-full rounded-xl px-4 py-3 bg-white/95 border border-white/40 placeholder-slate-400 focus:ring-2 focus:ring-white focus:border-transparent shadow-sm text-slate-700" 
-                  placeholder="Try: 'Next Monday 2pm in New York' or 'Tomorrow morning in London'" 
-                  tabIndex={8} 
-                />
-                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-slate-400">Press Enter</span>
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  onClick={onParseNL} 
-                  className="px-6 py-3 rounded-xl bg-white text-gray-600 hover:bg-gray-50 font-semibold transition-all shadow-md hover:shadow-lg hover:scale-105" 
-                  tabIndex={9}
-                >
-                  Parse
-                </button>
-                <a 
-                  className="px-4 py-3 rounded-xl bg-white/20 text-white hover:bg-white/30 font-medium transition-all text-sm flex items-center" 
-                  href="https://developer.chrome.com/docs/ai/built-in/" 
-                  target="_blank" 
-                  rel="noreferrer"
-                >
-                  Guide
-                </a>
-              </div>
-            </div>
-          </div>
-        )}
+        <NaturalLanguageInput
+          hasBuiltInAI={hasBuiltInAI}
+          value={nlInput}
+          onChange={setNlInput}
+          onParse={onParseNL}
+        />
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6 mb-6">
