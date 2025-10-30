@@ -37,6 +37,22 @@ export default function TimezoneConverter() {
     setHasBuiltInAI(ok);
   }, []);
 
+  // Load add-to-calendar-button script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/add-to-calendar-button@2';
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+    return () => {
+      // Cleanup: remove script if component unmounts
+      const existingScript = document.querySelector('script[src="https://cdn.jsdelivr.net/npm/add-to-calendar-button@2"]');
+      if (existingScript) {
+        document.head.removeChild(existingScript);
+      }
+    };
+  }, []);
+
   const timezones = useMemo(() => {
     try { // prefer full Intl list when available
       // @ts-ignore
@@ -640,6 +656,64 @@ export default function TimezoneConverter() {
     const m = Math.round((abs - h) * 60);
     return `${sign}${h}${m ? `:${String(m).padStart(2,'0')}` : ''} hrs`;
   }
+
+  // Format date/time for add-to-calendar-button
+  const calendarEventData = useMemo(() => {
+    if (!inputInstant || !fromZone || !toZone || !dtLocalISO) return null;
+    
+    try {
+      // Format start date/time from fromZone
+      const fromFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: fromZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const fromParts = fromFormatter.formatToParts(inputInstant).reduce((acc: any, p: any) => {
+        if (p.type !== 'literal') acc[p.type] = p.value;
+        return acc;
+      }, {});
+      
+      const startDate = `${fromParts.year}-${fromParts.month}-${fromParts.day}`;
+      const startTime = `${fromParts.hour}:${fromParts.minute}`;
+      
+      // Format end time (default to 1 hour later, same day)
+      const endInstant = new Date(inputInstant.getTime() + 60 * 60 * 1000);
+      const endParts = fromFormatter.formatToParts(endInstant).reduce((acc: any, p: any) => {
+        if (p.type !== 'literal') acc[p.type] = p.value;
+        return acc;
+      }, {});
+      
+      const endDate = `${endParts.year}-${endParts.month}-${endParts.day}`;
+      const endTime = `${endParts.hour}:${endParts.minute}`;
+      
+      // Create description with timezone conversion summary
+      const diff = tzDiffHours;
+      const diffText = diff == null ? '±?? hrs' : diffLabel(diff);
+      const convertedShort = shortTimeForZone(inputInstant, toZone);
+      let dayPrefix = '';
+      if(dayRelation === 'PREVIOUS DAY') dayPrefix = '(previous day) ';
+      else if(dayRelation === 'NEXT DAY') dayPrefix = '(next day) ';
+      
+      const description = `Timezone Conversion: ${inputFormatted || 'N/A'} (${fromZone}) ${dayPrefix}is ${convertedShort} (${diffText}) in ${toZone}.`;
+      
+      return {
+        name: `Meeting/Event (${fromZone} → ${toZone})`,
+        description,
+        startDate,
+        startTime,
+        endDate,
+        endTime,
+        timeZone: fromZone
+      };
+    } catch {
+      return null;
+    }
+  }, [inputInstant, fromZone, toZone, dtLocalISO, tzDiffHours, dayRelation, inputFormatted]);
 
   // compute availability segments (96 15-minute segments) representing the selected date in fromZone
   function buildSegments(){
@@ -1445,6 +1519,31 @@ Text: \"${text}\"`;
                         <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Time Difference</div>
                         <div className="text-2xl font-bold text-slate-800">
                           {diffLabel(tzDiffHours)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Add to Calendar Button */}
+                  {calendarEventData && (
+                    <div className="pt-6 border-t border-slate-200">
+                      <div className="text-center">
+                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Add to Calendar</div>
+                        <div className="flex justify-center items-center">
+                          {/* @ts-ignore - Web component */}
+                          <add-to-calendar-button
+                            name={calendarEventData.name}
+                            description={calendarEventData.description}
+                            startDate={calendarEventData.startDate}
+                            startTime={calendarEventData.startTime}
+                            endDate={calendarEventData.endDate}
+                            endTime={calendarEventData.endTime}
+                            timeZone={calendarEventData.timeZone}
+                            options="['Apple','Google','iCal','Microsoft365','Outlook.com','Yahoo']"
+                            trigger="click"
+                            listStyle="modal"
+                            lightMode="bodyScheme"
+                          />
                         </div>
                       </div>
                     </div>
