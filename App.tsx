@@ -29,9 +29,6 @@ export default function TimezoneConverter() {
   const [showFromSettings, setShowFromSettings] = useState(false);
   const [showToSettings, setShowToSettings] = useState(false);
 
-  const [sliderIndex, setSliderIndex] = useState<number | null>(null);
-  const [isSliderDragging, setIsSliderDragging] = useState(false);
-
   useEffect(() => {
     const ok = (() => {
       try { if ((navigator && (navigator as any).ai) || (window as any).ai || ((window as any).chrome && (window as any).chrome.ai)) return true; } catch(e){}
@@ -217,7 +214,6 @@ export default function TimezoneConverter() {
     }
   }, [dtLocalISO, timezones]);
 
-  function norm(s: any){ return (s||"").toString().toLowerCase().replace(/[^a-z0-9]+/g,''); }
   function fuzzySearchInternal(q: any){
     if(!q) return timezones;
     return fuzzySearch(q, timezones, aliasMap);
@@ -301,31 +297,6 @@ export default function TimezoneConverter() {
     return (offTo - offFrom) / 60;
   }, [inputInstant, fromZone, toZone]);
 
-
-  function formatLocalISOForDisplay(localISO: string, tz: string){
-    if(!localISO || !tz) return '—';
-    try {
-      // Use inputInstant if available, otherwise parse
-      const instant = parseLocalInputToDateInternal(localISO, tz);
-      if(!instant) return '—';
-      
-      // Format it nicely
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: tz,
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-      
-      return formatter.format(instant);
-    } catch {
-      return localISO;
-    }
-  }
-
   const inputFormatted = useMemo(()=>{
     if(!dtLocalISO || !fromZone) return null;
     // Format directly from dtLocalISO to ensure accuracy
@@ -358,63 +329,6 @@ export default function TimezoneConverter() {
   }, [inputInstant, fromZone, toZone]);
 
 
-  // Format date/time for add-to-calendar-button
-  const calendarEventData = useMemo(() => {
-    if (!inputInstant || !fromZone || !toZone || !dtLocalISO) return null;
-    
-    try {
-      // Format start date/time from fromZone
-      const fromFormatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: fromZone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
-      
-      const fromParts = fromFormatter.formatToParts(inputInstant).reduce((acc: any, p: any) => {
-        if (p.type !== 'literal') acc[p.type] = p.value;
-        return acc;
-      }, {});
-      
-      const startDate = `${fromParts.year}-${fromParts.month}-${fromParts.day}`;
-      const startTime = `${fromParts.hour}:${fromParts.minute}`;
-      
-      // Format end time (default to 1 hour later, same day)
-      const endInstant = new Date(inputInstant.getTime() + 60 * 60 * 1000);
-      const endParts = fromFormatter.formatToParts(endInstant).reduce((acc: any, p: any) => {
-        if (p.type !== 'literal') acc[p.type] = p.value;
-        return acc;
-      }, {});
-      
-      const endDate = `${endParts.year}-${endParts.month}-${endParts.day}`;
-      const endTime = `${endParts.hour}:${endParts.minute}`;
-      
-      // Create description with timezone conversion summary
-      const diff = tzDiffHours;
-      const diffText = diff == null ? '±?? hrs' : diffLabel(diff);
-      const convertedShort = shortTimeForZone(inputInstant, toZone);
-      let dayPrefix = '';
-      if(dayRelation === 'PREVIOUS DAY') dayPrefix = '(previous day) ';
-      else if(dayRelation === 'NEXT DAY') dayPrefix = '(next day) ';
-      
-      const description = `Timezone Conversion: ${inputFormatted || 'N/A'} (${fromZone}) ${dayPrefix}is ${convertedShort} (${diffText}) in ${toZone}.`;
-      
-      return {
-        name: `Meeting/Event (${fromZone} → ${toZone})`,
-        description,
-        startDate,
-        startTime,
-        endDate,
-        endTime,
-        timeZone: fromZone
-      };
-    } catch {
-      return null;
-    }
-  }, [inputInstant, fromZone, toZone, dtLocalISO, tzDiffHours, dayRelation, inputFormatted]);
 
   // compute availability segments (96 15-minute segments) representing the selected date in fromZone
   const segments = useMemo(() => {
@@ -494,23 +408,6 @@ export default function TimezoneConverter() {
 
   // sliderIndex is derived from positionIndicator - no need for separate useEffect
   // Removed redundant calculation that was recalculating parseLocalInputToDate
-
-  function onSliderChange(idx: number){ 
-    // Update dtLocalISO directly - all other values will derive from it
-    const datePart = dtLocalISO.split('T')[0] || new Date().toISOString().slice(0,10); 
-    const hh = Math.floor(idx/4); 
-    const mm = (idx%4)*15; 
-    const newISO = `${datePart}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; 
-    setDtLocalISO(newISO); 
-  }
-
-  function onSliderMouseDown() {
-    setIsSliderDragging(true);
-  }
-
-  function onSliderMouseUp() {
-    setIsSliderDragging(false);
-  }
 
   function handleSwap(){
     // Get the current instant (point in time) before swapping
@@ -603,19 +500,192 @@ Text: \"${text}\"`;
   }
 
 
+  // Calculate working hours overlap statistics
+  const overlapStats = useMemo(() => {
+    if (!segments.length) return null;
+    const bothCount = segments.filter(s => s.status === 'both').length;
+    const fromCount = segments.filter(s => s.status === 'from').length;
+    const toCount = segments.filter(s => s.status === 'to').length;
+    const noneCount = segments.filter(s => s.status === 'none').length;
+    const total = segments.length;
+    
+    const bothPercent = (bothCount / total) * 100;
+    const fromPercent = (fromCount / total) * 100;
+    const toPercent = (toCount / total) * 100;
+    
+    return { bothCount, fromCount, toCount, noneCount, total, bothPercent, fromPercent, toPercent };
+  }, [segments]);
+
+  // Get humanized time description based on hour decimal
+  function getHumanizedTimeDescription(hourDecimal: number | null): string {
+    if (hourDecimal === null) return '';
+    
+    // Normalize hour to 0-24 range
+    let hour = hourDecimal;
+    if (hour < 0) hour += 24;
+    if (hour >= 24) hour -= 24;
+    
+    if (hour >= 0 && hour < 2) return 'late night';
+    if (hour >= 2 && hour < 4) return 'very early morning';
+    if (hour >= 4 && hour < 6) return 'quite early in the morning';
+    if (hour >= 6 && hour < 8) return 'early morning';
+    if (hour >= 8 && hour < 10) return 'morning';
+    if (hour >= 10 && hour < 12) return 'late morning';
+    if (hour >= 12 && hour < 15) return 'afternoon';
+    if (hour >= 15 && hour < 17) return 'late afternoon';
+    if (hour >= 17 && hour < 20) return 'evening';
+    if (hour >= 20 && hour < 22) return 'late evening';
+    if (hour >= 22 && hour < 24) return 'night';
+    
+    return '';
+  }
+
+  // Check if current time is within working hours for each timezone
+  const currentTimeInWorkingHours = useMemo(() => {
+    if (!inputInstant || !fromZone || !toZone) return null;
+    
+    const fromLocal = getLocalHourDecimal(inputInstant, fromZone);
+    const toLocal = getLocalHourDecimal(inputInstant, toZone);
+    
+    let inFrom = false;
+    if (fromLocal !== null) {
+      if (fromWorkStart <= fromWorkEnd) {
+        inFrom = fromLocal >= fromWorkStart && fromLocal < fromWorkEnd;
+      } else {
+        inFrom = fromLocal >= fromWorkStart || fromLocal < fromWorkEnd;
+      }
+    }
+    
+    let inTo = false;
+    if (toLocal !== null) {
+      if (toWorkStart <= toWorkEnd) {
+        inTo = toLocal >= toWorkStart && toLocal < toWorkEnd;
+      } else {
+        inTo = toLocal >= toWorkStart || toLocal < toWorkEnd;
+      }
+    }
+    
+    return { inFrom, inTo, fromLocal, toLocal };
+  }, [inputInstant, fromZone, toZone, fromWorkStart, fromWorkEnd, toWorkStart, toWorkEnd]);
+
+  // Format date/time for add-to-calendar-button
+  const calendarEventData = useMemo(() => {
+    if (!inputInstant || !fromZone || !toZone || !dtLocalISO) return null;
+    
+    try {
+      // Format start date/time from fromZone
+      const fromFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: fromZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const fromParts = fromFormatter.formatToParts(inputInstant).reduce((acc: any, p: any) => {
+        if (p.type !== 'literal') acc[p.type] = p.value;
+        return acc;
+      }, {});
+      
+      const startDate = `${fromParts.year}-${fromParts.month}-${fromParts.day}`;
+      const startTime = `${fromParts.hour}:${fromParts.minute}`;
+      
+      // Format end time (default to 1 hour later, same day)
+      const endInstant = new Date(inputInstant.getTime() + 60 * 60 * 1000);
+      const endParts = fromFormatter.formatToParts(endInstant).reduce((acc: any, p: any) => {
+        if (p.type !== 'literal') acc[p.type] = p.value;
+        return acc;
+      }, {});
+      
+      const endDate = `${endParts.year}-${endParts.month}-${endParts.day}`;
+      const endTime = `${endParts.hour}:${endParts.minute}`;
+      
+      // Create description with timezone conversion summary
+      const diff = tzDiffHours;
+      const diffText = diff == null ? '±?? hrs' : diffLabel(diff);
+      const convertedShort = shortTimeForZone(inputInstant, toZone);
+      let dayPrefix = '';
+      if(dayRelation === 'PREVIOUS DAY') dayPrefix = '(previous day) ';
+      else if(dayRelation === 'NEXT DAY') dayPrefix = '(next day) ';
+      
+      // Build working hours status text
+      let workingHoursText = '';
+      if (currentTimeInWorkingHours) {
+        const { inFrom, inTo, fromLocal, toLocal } = currentTimeInWorkingHours;
+        const fromTzName = fromZone?.split('/').pop()?.replace(/_/g, ' ') || fromZone;
+        const toTzName = toZone?.split('/').pop()?.replace(/_/g, ' ') || toZone;
+        
+        if (inFrom && inTo) {
+          workingHoursText = ` Both timezones are within working hours.`;
+        } else {
+          const parts: string[] = [];
+          if (inFrom) {
+            parts.push(`Within ${fromTzName} working hours`);
+          } else if (fromLocal !== null) {
+            parts.push(`Outside ${fromTzName} working hours (${getHumanizedTimeDescription(fromLocal)})`);
+          }
+          
+          if (inTo) {
+            parts.push(`Within ${toTzName} working hours`);
+          } else if (toLocal !== null) {
+            parts.push(`Outside ${toTzName} working hours (${getHumanizedTimeDescription(toLocal)})`);
+          }
+          
+          if (parts.length > 0) {
+            workingHoursText = ` ${parts.join('. ')}.`;
+          }
+        }
+      }
+      
+      const description = `Timezone Conversion: ${inputFormatted || 'N/A'} (${fromZone}) ${dayPrefix}➡ ${convertedShort} (${diffText}) in ${toZone}.${workingHoursText}`;
+      
+      return {
+        name: `Meeting/Event (${fromZone} → ${toZone})`,
+        description,
+        startDate,
+        startTime,
+        endDate,
+        endTime,
+        timeZone: fromZone
+      };
+    } catch {
+      return null;
+    }
+  }, [inputInstant, fromZone, toZone, dtLocalISO, tzDiffHours, dayRelation, inputFormatted, currentTimeInWorkingHours]);
+
   function humanSentence(){
     if(!inputInstant || !convertedStr) return null;
     const diff = tzDiffHours;
     const diffText = diff == null ? '±?? hrs' : diffLabel(diff);
     const convertedShort = shortTimeForZone(inputInstant, toZone);
-    let dayPrefix = '';
+    let dayPrefix = null;
     if(dayRelation === 'PREVIOUS DAY') dayPrefix = '(previous day) ';
     else if(dayRelation === 'NEXT DAY') dayPrefix = '(next day) ';
     
+    // Split inputFormatted to separate date and time
+    const inputParts = inputFormatted ? inputFormatted.split(', ') : [];
+    const inputDate = inputParts.slice(0, -1).join(', '); // Everything except last part
+    const inputTime = inputParts[inputParts.length - 1]; // Last part is the time
+    
+    let overlapInfo = null;
+    if (overlapStats) {
+      if (overlapStats.bothPercent > 20) {
+        overlapInfo = <span className="text-slate-600 font-medium"> • Working hours overlap</span>;
+      } else if (overlapStats.fromPercent > overlapStats.toPercent && overlapStats.fromPercent > 30) {
+        overlapInfo = <span className="text-amber-600 font-medium"> • Tilting towards {fromZone?.split('/').pop() || 'from'} timezone</span>;
+      } else if (overlapStats.toPercent > overlapStats.fromPercent && overlapStats.toPercent > 30) {
+        overlapInfo = <span className="text-amber-600 font-medium"> • Tilting towards {toZone?.split('/').pop() || 'to'} timezone</span>;
+      } else if (overlapStats.noneCount > overlapStats.total * 0.6) {
+        overlapInfo = <span className="text-slate-500 font-medium"> • Limited overlap</span>;
+      }
+    }
+    
     return (
       <>
-        <span className="font-semibold">{inputFormatted}</span> ({fromZone}) <span className="font-semibold">is</span> {dayPrefix}
-        <span className="font-semibold">{convertedShort}</span> ({diffText}) <span className="font-semibold">in</span> {toZone}.
+        <span className="text-slate-600">{inputDate}</span>, <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-slate-300 bg-slate-50 mx-1"><span className="font-semibold text-violet-400">{inputTime}</span> <span className="text-slate-700 text-xs font-medium">({fromZone})</span></span> <span className="font-semibold">➡</span> {dayPrefix && <span className="text-orange-600 font-medium">{dayPrefix}</span>}
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-slate-300 bg-slate-50 mx-1"><span className="font-semibold text-violet-600">{convertedShort}</span> <span className="text-slate-700 text-xs font-medium">({diffText})</span> <span className="text-slate-700 text-xs font-medium">in {toZone}</span></span>.{overlapInfo}
       </>
     );
   }
@@ -672,7 +742,7 @@ Text: \"${text}\"`;
 
           {/* Left Column - Input Section */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
               <div className="bg-gradient-to-r from-gray-500 to-gray-600 px-6 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -682,7 +752,7 @@ Text: \"${text}\"`;
                 </div>
               </div>
               
-              <div className="p-6 space-y-6">
+              <div className="p-6 space-y-6 overflow-visible">
                 {/* Date & Time */}
                 <div>
                   <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
@@ -719,7 +789,7 @@ Text: \"${text}\"`;
                         />
                         <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none text-xs">▼</span>
                         {fromFocused && fromResults.length > 0 && (
-                          <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-slate-200 rounded-xl shadow-xl max-h-60 overflow-auto z-20">
+                          <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-slate-200 rounded-xl shadow-xl max-h-60 overflow-auto z-50">
                             {fromResults.slice(0, 10).map(tz => (
                               <div 
                                 key={tz} 
@@ -780,7 +850,7 @@ Text: \"${text}\"`;
                         />
                         <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none text-xs">▼</span>
                         {toFocused && toResults.length > 0 && (
-                          <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-slate-200 rounded-xl shadow-xl max-h-60 overflow-auto z-20">
+                          <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-slate-200 rounded-xl shadow-xl max-h-60 overflow-auto z-50">
                             {toResults.slice(0, 10).map(tz => (
                               <div 
                                 key={tz} 
@@ -810,14 +880,89 @@ Text: \"${text}\"`;
                 </div>
 
                 {/* Human-readable sentence */}
-                {sentence && (
-                  <div className="bg-gradient-to-r from-gray-50 to-gray-50 rounded-xl p-4 border-l-4 border-gray-500">
-                    <div className="text-sm font-medium text-slate-600 mb-1">Summary</div>
-                    <div className="text-slate-800">{sentence}</div>
+                {sentence && fromZone && toZone && (
+                  <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-5 border border-slate-200">
+                    <div className="bg-white rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm font-medium text-slate-600 mb-1">Summary</div>
+                      <div className="text-slate-800 mb-3">{sentence}</div>
+                      
+                      {/* Working Hours Checkboxes */}
+                      {currentTimeInWorkingHours && (
+                        <div className="flex flex-col gap-2 mt-4 pt-3 border-t border-slate-200">
+                          <label className="flex items-center gap-2 cursor-pointer group relative">
+                            <div className="relative flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={currentTimeInWorkingHours.inFrom}
+                                readOnly
+                                disabled
+                                title="Automatically calculated based on your working hours settings"
+                                className="w-5 h-5 rounded border-2 appearance-none cursor-not-allowed"
+                                style={{ 
+                                  borderColor: currentTimeInWorkingHours.inFrom && currentTimeInWorkingHours.inTo ? '#10b981' : '#fbbf24',
+                                  backgroundColor: currentTimeInWorkingHours.inFrom ? (currentTimeInWorkingHours.inFrom && currentTimeInWorkingHours.inTo ? '#10b981' : '#fbbf24') : 'transparent'
+                                }}
+                              />
+                              {currentTimeInWorkingHours.inFrom && (
+                                <svg className="absolute w-3 h-3 text-white pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="text-sm text-slate-700">
+                              Within <span className="font-semibold text-amber-600">{fromZone?.split('/').pop()?.replace(/_/g, ' ') || fromZone}</span> working hours
+                              {!currentTimeInWorkingHours.inFrom && currentTimeInWorkingHours.fromLocal !== null && (
+                                <span className="text-slate-500"> ({getHumanizedTimeDescription(currentTimeInWorkingHours.fromLocal)})</span>
+                              )}
+                            </span>
+                            <div className="absolute left-0 top-full mt-2 hidden group-hover:block z-50">
+                              <div className="bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                                Automatically calculated based on your working hours settings
+                                <div className="absolute -top-1 left-2 w-2 h-2 bg-slate-800 rotate-45"></div>
+                              </div>
+                            </div>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer group relative">
+                            <div className="relative flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={currentTimeInWorkingHours.inTo}
+                                readOnly
+                                disabled
+                                title="Automatically calculated based on your working hours settings"
+                                className="w-5 h-5 rounded border-2 appearance-none cursor-not-allowed"
+                                style={{ 
+                                  borderColor: currentTimeInWorkingHours.inFrom && currentTimeInWorkingHours.inTo ? '#10b981' : '#fb923c',
+                                  backgroundColor: currentTimeInWorkingHours.inTo ? (currentTimeInWorkingHours.inFrom && currentTimeInWorkingHours.inTo ? '#10b981' : '#fb923c') : 'transparent'
+                                }}
+                              />
+                              {currentTimeInWorkingHours.inTo && (
+                                <svg className="absolute w-3 h-3 text-white pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="text-sm text-slate-700">
+                              Within <span className="font-semibold text-orange-600">{toZone?.split('/').pop()?.replace(/_/g, ' ') || toZone}</span> working hours
+                              {!currentTimeInWorkingHours.inTo && currentTimeInWorkingHours.toLocal !== null && (
+                                <span className="text-slate-500"> ({getHumanizedTimeDescription(currentTimeInWorkingHours.toLocal)})</span>
+                              )}
+                            </span>
+                            <div className="absolute left-0 top-full mt-2 hidden group-hover:block z-50">
+                              <div className="bg-slate-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                                Automatically calculated based on your working hours settings
+                                <div className="absolute -top-1 left-2 w-2 h-2 bg-slate-800 rotate-45"></div>
+                              </div>
+                            </div>
+                          </label>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
                 {/* Working Hours Visualization */}
+                {fromZone && toZone && (
                 <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-5 border border-slate-200">
                   <div className="flex items-center mb-4">
                     <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500 text-white font-bold mr-3 shadow-md">
@@ -949,33 +1094,57 @@ Text: \"${text}\"`;
                     </div>
                   </div>
                   
-                  <div className="bg-white rounded-lg p-4 border border-slate-200">
-                    <div className="text-sm font-semibold text-slate-700 mb-2">Overlap Window</div>
-                    <div className="text-sm text-slate-600">
-                      {overlapWindow && overlapWindow.startInstant && overlapWindow.endInstant && fromZone && toZone ? (
-                        <div>
-                          Both timezones are working between{' '}
-                          <span className="font-semibold text-emerald-600">
-                            {shortTimeForZone(overlapWindow.startInstant, fromZone)} {getShortTimezoneName(fromZone)}
-                          </span>
-                          {' '}({formatTimeWithDateIfDifferent(overlapWindow.startInstant, toZone, overlapWindow.startInstant, fromZone)}{' '}{getShortTimezoneName(toZone)}){' '}
-                          to{' '}
-                          <span className="font-semibold text-emerald-600">
-                            {shortTimeForZone(overlapWindow.endInstant, fromZone)} {getShortTimezoneName(fromZone)}
-                          </span>
-                          {' '}({formatTimeWithDateIfDifferent(overlapWindow.endInstant, toZone, overlapWindow.startInstant, fromZone)}{' '}{getShortTimezoneName(toZone)})
+                  <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg p-4 border-2 border-slate-300">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0 mt-0.5">
+                        💡
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-slate-800 mb-2">Wondering when your working hours overlap?</div>
+                        <div className="text-sm text-slate-700">
+                          {overlapWindow && overlapWindow.startInstant && overlapWindow.endInstant && fromZone && toZone ? (() => {
+                            const startDateFrom = localYMD(fromZone, overlapWindow.startInstant);
+                            const startDateTo = localYMD(toZone, overlapWindow.startInstant);
+                            const endDateFrom = localYMD(fromZone, overlapWindow.endInstant);
+                            const endDateTo = localYMD(toZone, overlapWindow.endInstant);
+                            
+                            const startDiffers = startDateFrom && startDateTo && 
+                              (startDateFrom.year !== startDateTo.year || startDateFrom.month !== startDateTo.month || startDateFrom.day !== startDateTo.day);
+                            const endDiffers = endDateFrom && endDateTo && 
+                              (endDateFrom.year !== endDateTo.year || endDateFrom.month !== endDateTo.month || endDateFrom.day !== endDateTo.day);
+                            
+                            const startTimeStr = formatTimeWithDateIfDifferent(overlapWindow.startInstant, toZone, overlapWindow.startInstant, fromZone);
+                            const endTimeStr = formatTimeWithDateIfDifferent(overlapWindow.endInstant, toZone, overlapWindow.startInstant, fromZone);
+                            
+                            return (
+                              <div>
+                                Both timezones are working between{' '}
+                                <span className="font-semibold text-violet-400">
+                                  {shortTimeForZone(overlapWindow.startInstant, fromZone)} {getShortTimezoneName(fromZone)}
+                                </span>
+                                {' '}(<span className={startDiffers ? "text-orange-600 font-medium" : "text-violet-600"}>{startTimeStr}</span>{' '}{getShortTimezoneName(toZone)}){' '}
+                                to{' '}
+                                <span className="font-semibold text-violet-400">
+                                  {shortTimeForZone(overlapWindow.endInstant, fromZone)} {getShortTimezoneName(fromZone)}
+                                </span>
+                                {' '}(<span className={endDiffers ? "text-orange-600 font-medium" : "text-violet-600"}>{endTimeStr}</span>{' '}{getShortTimezoneName(toZone)})
+                              </div>
+                            );
+                          })() : (
+                            <div className="text-slate-600">No full overlap available on this date.</div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="text-slate-500">No full overlap available on this date.</div>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Right Column - Conversion Result */}
+          {fromZone && toZone && (
           <div className="lg:col-span-1">
             <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden sticky top-6">
               <div className="bg-gradient-to-r from-gray-500 to-gray-600 px-6 py-4">
@@ -989,15 +1158,16 @@ Text: \"${text}\"`;
                 <div className="space-y-8">
                   {/* From Time Display */}
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Original Time</div>
                     {inputInstant && inputFormatted && (
                       <>
                         {/* Time - MOST PROMINENT with timezone */}
                         <div className="mb-3">
-                          <div className="text-6xl font-bold text-gray-700 mb-1">
+                          <div className="text-6xl font-bold text-violet-400 mb-2">
                             {inputFormatted.split(', ').slice(-1)[0]}
                           </div>
-                          <div className="text-xs text-gray-400">{fromZone}</div>
+                          <div className="inline-flex items-center px-3 py-1 rounded-full border border-slate-300 bg-slate-50">
+                            <span className="text-xs text-slate-600 font-medium">{fromZone}</span>
+                          </div>
                         </div>
                         
                         {/* Date with Year merged - Secondary */}
@@ -1014,17 +1184,23 @@ Text: \"${text}\"`;
                     )}
                   </div>
                   
+                  {/* Downward Arrow */}
+                  <div className="flex justify-center my-4">
+                    <div className="text-3xl text-slate-400">⬇</div>
+                  </div>
+                  
                   {/* To Time Display */}
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Converted Time</div>
                     {convertedStr && (
                       <>
                         {/* Time - MOST PROMINENT with timezone */}
                         <div className="mb-3">
-                          <div className="text-6xl font-bold text-gray-700 mb-1">
+                          <div className="text-6xl font-bold text-violet-600 mb-2">
                             {convertedStr.split(', ').slice(-1)[0]}
                           </div>
-                          <div className="text-xs text-gray-400">{toZone}</div>
+                          <div className="inline-flex items-center px-3 py-1 rounded-full border border-slate-300 bg-slate-50">
+                            <span className="text-xs text-slate-600 font-medium">{toZone}</span>
+                          </div>
                         </div>
                         
                         {/* Date with Year merged - Secondary */}
@@ -1109,6 +1285,7 @@ Text: \"${text}\"`;
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* Footer Disclaimer */}

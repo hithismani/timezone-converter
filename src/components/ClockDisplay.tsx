@@ -1,5 +1,3 @@
-import { formatTime12Hour } from '../lib/utils';
-
 interface ClockDisplayProps {
   time: Date | null;
   timezone: string | null;
